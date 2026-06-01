@@ -1,0 +1,176 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Seoul · 2-Week Interactive Itinerary</title>
+  <meta name="description" content="An interactive 2-week Seoul travel itinerary — map, budget tracker, checklist and more. No login, no API keys." />
+  <!-- Leaflet (free, OpenStreetMap — no API key needed) -->
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"
+        integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY=" crossorigin="" />
+  <link rel="stylesheet" href="css/styles.css" />
+  <link rel="preconnect" href="https://tile.openstreetmap.org" />
+</head>
+<body>
+  <header class="topbar">
+    <div class="brand">
+      <span class="brand-logo">🇰🇷</span>
+      <div>
+        <h1 id="trip-title">Seoul</h1>
+        <p class="subtitle">2-Week Interactive Itinerary</p>
+      </div>
+    </div>
+    <div class="topbar-actions">
+      <div class="trip-meta">
+        <label>Start date
+          <input type="date" id="start-date" />
+        </label>
+      </div>
+      <button id="theme-toggle" class="icon-btn" title="Toggle dark mode" aria-label="Toggle theme">🌙</button>
+      <button id="menu-btn" class="icon-btn" title="Tools" aria-label="Open tools">⚙️</button>
+    </div>
+  </header>
+
+  <!-- Progress + summary bar -->
+  <section class="summary">
+    <div class="summary-item">
+      <span class="summary-num" id="stat-days">14</span>
+      <span class="summary-label">Days</span>
+    </div>
+    <div class="summary-item">
+      <span class="summary-num" id="stat-activities">0</span>
+      <span class="summary-label">Activities</span>
+    </div>
+    <div class="summary-item">
+      <span class="summary-num" id="stat-done">0%</span>
+      <span class="summary-label">Completed</span>
+    </div>
+    <div class="summary-item">
+      <span class="summary-num" id="stat-budget">₩0</span>
+      <span class="summary-label">Est. budget / person</span>
+    </div>
+    <div class="progress-wrap" title="Trip progress">
+      <div class="progress-bar" id="progress-bar"></div>
+    </div>
+  </section>
+
+  <!-- Controls -->
+  <section class="controls">
+    <input type="search" id="search" placeholder="🔍 Search activities, food, places…" autocomplete="off" />
+    <div class="filters" id="type-filters"><!-- chips injected --></div>
+    <label class="checkbox-inline">
+      <input type="checkbox" id="hide-done" /> Hide completed
+    </label>
+  </section>
+
+  <main class="layout">
+    <!-- Day navigation -->
+    <nav class="day-rail" id="day-rail" aria-label="Day navigation"></nav>
+
+    <!-- Itinerary list -->
+    <div class="itinerary" id="itinerary"></div>
+
+    <!-- Map -->
+    <aside class="map-pane">
+      <div id="map"></div>
+      <div class="map-legend" id="map-legend"></div>
+    </aside>
+  </main>
+
+  <!-- Tools drawer -->
+  <div class="drawer-backdrop" id="drawer-backdrop" hidden></div>
+  <aside class="drawer" id="drawer" hidden aria-label="Tools">
+    <div class="drawer-head">
+      <h2>Trip Tools</h2>
+      <button class="icon-btn" id="drawer-close" aria-label="Close">✕</button>
+    </div>
+
+    <div class="drawer-section">
+      <h3>💱 Currency converter</h3>
+      <p class="muted small">Offline estimate — set your own rate. Default: 1 USD ≈ 1370 KRW.</p>
+      <div class="conv-row">
+        <input type="number" id="conv-krw" placeholder="KRW (₩)" />
+        <span>⇄</span>
+        <input type="number" id="conv-usd" placeholder="USD ($)" />
+      </div>
+      <label class="small">Rate (KRW per 1 USD)
+        <input type="number" id="conv-rate" value="1370" />
+      </label>
+    </div>
+
+    <div class="drawer-section">
+      <h3>💰 Budget by category</h3>
+      <div id="budget-breakdown" class="budget-breakdown"></div>
+    </div>
+
+    <div class="drawer-section">
+      <h3>🧳 Packing checklist</h3>
+      <div class="add-row">
+        <input type="text" id="packing-input" placeholder="Add item…" />
+        <button id="packing-add" class="btn small">Add</button>
+      </div>
+      <ul class="checklist" id="packing-list"></ul>
+    </div>
+
+    <div class="drawer-section">
+      <h3>🗣️ Handy Korean phrases</h3>
+      <ul class="phrases" id="phrases-list"></ul>
+    </div>
+
+    <div class="drawer-section">
+      <h3>💡 Travel tips</h3>
+      <ul class="tips" id="tips-list"></ul>
+    </div>
+
+    <div class="drawer-section">
+      <h3>💾 Your data</h3>
+      <p class="muted small">Everything is saved in your browser (localStorage). Nothing leaves your device.</p>
+      <div class="btn-row">
+        <button id="export-btn" class="btn small">⬇ Export</button>
+        <button id="import-btn" class="btn small">⬆ Import</button>
+        <button id="print-btn" class="btn small">🖨 Print</button>
+        <button id="reset-btn" class="btn small danger">↺ Reset</button>
+      </div>
+      <input type="file" id="import-file" accept="application/json" hidden />
+    </div>
+  </aside>
+
+  <!-- Add / edit activity modal -->
+  <div class="modal-backdrop" id="modal-backdrop" hidden>
+    <div class="modal" role="dialog" aria-modal="true" aria-labelledby="modal-title">
+      <div class="drawer-head">
+        <h2 id="modal-title">Add activity</h2>
+        <button class="icon-btn" id="modal-close" aria-label="Close">✕</button>
+      </div>
+      <form id="activity-form">
+        <input type="hidden" id="f-dayIndex" />
+        <input type="hidden" id="f-itemIndex" />
+        <div class="form-grid">
+          <label>Time <input type="time" id="f-time" /></label>
+          <label>Type
+            <select id="f-type"></select>
+          </label>
+          <label class="full">Name <input type="text" id="f-name" required placeholder="e.g. Lunch at…" /></label>
+          <label>Cost (₩) <input type="number" id="f-cost" min="0" placeholder="0" /></label>
+          <label>Link (URL) <input type="url" id="f-url" placeholder="https://…" /></label>
+          <label class="full">Notes <textarea id="f-notes" rows="2" placeholder="Details, reservations, tips…"></textarea></label>
+          <label class="full">Coordinates (lat, lng — optional)
+            <input type="text" id="f-coords" placeholder="37.5665, 126.9780" />
+          </label>
+        </div>
+        <div class="btn-row end">
+          <button type="button" class="btn" id="f-delete" hidden>Delete</button>
+          <button type="submit" class="btn primary">Save</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <div id="toast" class="toast" hidden></div>
+
+  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"
+          integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo=" crossorigin=""></script>
+  <script src="js/data.js"></script>
+  <script src="js/app.js"></script>
+</body>
+</html>
