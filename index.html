@@ -61,6 +61,8 @@
     <label class="checkbox-inline">
       <input type="checkbox" id="hide-done" /> Hide completed
     </label>
+    <button id="add-activity-btn" class="btn primary small">＋ Add activity</button>
+    <button id="add-day-btn" class="btn small">📅 Add day</button>
   </section>
 
   <main class="layout">
@@ -143,8 +145,19 @@
         <button class="icon-btn" id="modal-close" aria-label="Close">✕</button>
       </div>
       <form id="activity-form">
-        <input type="hidden" id="f-dayIndex" />
         <input type="hidden" id="f-itemIndex" />
+        <div class="form-grid">
+          <label class="full">Day
+            <select id="f-day"></select>
+          </label>
+        </div>
+        <fieldset class="form-grid newday-fields" id="f-newday-fields" hidden>
+          <legend>New day details</legend>
+          <label>Date <input type="date" id="f-newdate" /></label>
+          <label>Area <input type="text" id="f-newarea" placeholder="e.g. Jongno-gu" /></label>
+          <label class="full">Day title <input type="text" id="f-newtitle" placeholder="e.g. Markets & Museums" /></label>
+          <label class="full">Theme <input type="text" id="f-newtheme" placeholder="optional short description" /></label>
+        </fieldset>
         <div class="form-grid">
           <label>Time <input type="time" id="f-time" /></label>
           <label>Type
@@ -160,6 +173,29 @@
         </div>
         <div class="btn-row end">
           <button type="button" class="btn" id="f-delete" hidden>Delete</button>
+          <button type="submit" class="btn primary">Save</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- Add / edit day modal -->
+  <div class="modal-backdrop" id="day-modal-backdrop" hidden>
+    <div class="modal" role="dialog" aria-modal="true" aria-labelledby="day-modal-title">
+      <div class="drawer-head">
+        <h2 id="day-modal-title">Add day</h2>
+        <button class="icon-btn" id="day-modal-close" aria-label="Close">✕</button>
+      </div>
+      <form id="day-form">
+        <input type="hidden" id="d-index" />
+        <div class="form-grid">
+          <label>Date <input type="date" id="d-date" /></label>
+          <label>Area <input type="text" id="d-area" placeholder="e.g. Mapo-gu" /></label>
+          <label class="full">Day title <input type="text" id="d-title" required placeholder="e.g. Hongdae & Youth Culture" /></label>
+          <label class="full">Theme <input type="text" id="d-theme" placeholder="optional short description" /></label>
+        </div>
+        <div class="btn-row end">
+          <button type="button" class="btn danger" id="d-delete" hidden>Delete day</button>
           <button type="submit" class="btn primary">Save</button>
         </div>
       </form>

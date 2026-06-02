@@ -271,6 +271,21 @@ input:focus, select:focus, textarea:focus { outline: 2px solid var(--accent); ou
 .form-grid label { display: flex; flex-direction: column; gap: 4px; font-size: 12px; color: var(--muted); }
 .form-grid label.full { grid-column: 1 / -1; }
 .form-grid input, .form-grid select, .form-grid textarea { width: 100%; }
+.newday-fields {
+  border: 1px solid var(--border); border-radius: 12px; padding: 12px 14px 14px; margin-bottom: 12px;
+}
+.newday-fields legend { font-size: 12px; color: var(--accent); font-weight: 600; padding: 0 6px; }
+.day-header .day-edit-btn {
+  background: var(--surface); border: 1px solid var(--border); border-radius: 8px;
+  width: 30px; height: 30px; font-size: 13px; color: var(--muted); display: grid; place-items: center;
+}
+.day-header .day-edit-btn:hover { background: var(--accent-soft); color: var(--accent); }
+.add-day-row { text-align: center; padding: 6px 0 40px; }
+.add-day-row button {
+  border: 1.5px dashed var(--border); border-radius: 12px; background: var(--surface);
+  color: var(--muted); font-size: 14px; padding: 12px 22px;
+}
+.add-day-row button:hover { border-color: var(--accent); color: var(--accent); }
 
 /* Toast */
 .toast {
@@ -373,6 +388,8 @@ input:focus, select:focus, textarea:focus { outline: 2px solid var(--accent); ou
     <label class="checkbox-inline">
       <input type="checkbox" id="hide-done" /> Hide completed
     </label>
+    <button id="add-activity-btn" class="btn primary small">＋ Add activity</button>
+    <button id="add-day-btn" class="btn small">📅 Add day</button>
   </section>
 
   <main class="layout">
@@ -455,8 +472,19 @@ input:focus, select:focus, textarea:focus { outline: 2px solid var(--accent); ou
         <button class="icon-btn" id="modal-close" aria-label="Close">✕</button>
       </div>
       <form id="activity-form">
-        <input type="hidden" id="f-dayIndex" />
         <input type="hidden" id="f-itemIndex" />
+        <div class="form-grid">
+          <label class="full">Day
+            <select id="f-day"></select>
+          </label>
+        </div>
+        <fieldset class="form-grid newday-fields" id="f-newday-fields" hidden>
+          <legend>New day details</legend>
+          <label>Date <input type="date" id="f-newdate" /></label>
+          <label>Area <input type="text" id="f-newarea" placeholder="e.g. Jongno-gu" /></label>
+          <label class="full">Day title <input type="text" id="f-newtitle" placeholder="e.g. Markets & Museums" /></label>
+          <label class="full">Theme <input type="text" id="f-newtheme" placeholder="optional short description" /></label>
+        </fieldset>
         <div class="form-grid">
           <label>Time <input type="time" id="f-time" /></label>
           <label>Type
@@ -472,6 +500,29 @@ input:focus, select:focus, textarea:focus { outline: 2px solid var(--accent); ou
         </div>
         <div class="btn-row end">
           <button type="button" class="btn" id="f-delete" hidden>Delete</button>
+          <button type="submit" class="btn primary">Save</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- Add / edit day modal -->
+  <div class="modal-backdrop" id="day-modal-backdrop" hidden>
+    <div class="modal" role="dialog" aria-modal="true" aria-labelledby="day-modal-title">
+      <div class="drawer-head">
+        <h2 id="day-modal-title">Add day</h2>
+        <button class="icon-btn" id="day-modal-close" aria-label="Close">✕</button>
+      </div>
+      <form id="day-form">
+        <input type="hidden" id="d-index" />
+        <div class="form-grid">
+          <label>Date <input type="date" id="d-date" /></label>
+          <label>Area <input type="text" id="d-area" placeholder="e.g. Mapo-gu" /></label>
+          <label class="full">Day title <input type="text" id="d-title" required placeholder="e.g. Hongdae & Youth Culture" /></label>
+          <label class="full">Theme <input type="text" id="d-theme" placeholder="optional short description" /></label>
+        </div>
+        <div class="btn-row end">
+          <button type="button" class="btn danger" id="d-delete" hidden>Delete day</button>
           <button type="submit" class="btn primary">Save</button>
         </div>
       </form>
@@ -743,15 +794,40 @@ const TIPS = [
     try { localStorage.setItem(STORAGE_KEY, JSON.stringify(state)); } catch {}
   }
 
+  // Stable per-item ids so completion survives reordering / moving between days.
+  const uid = () => "i" + Math.random().toString(36).slice(2, 9) + Date.now().toString(36).slice(-4);
+  function ensureIds() {
+    state.itinerary.days.forEach(day => day.items.forEach(it => { if (!it.id) it.id = uid(); }));
+  }
+  // Migrate legacy "dayIndex-itemIndex" completion keys to id-based keys (one-time).
+  function migrateDone() {
+    const keys = Object.keys(state.done || {});
+    if (!keys.some(k => /^\d+-\d+$/.test(k))) return;
+    const nd = {};
+    keys.forEach(k => {
+      const m = k.match(/^(\d+)-(\d+)$/);
+      if (m) {
+        const it = state.itinerary.days[+m[1]] && state.itinerary.days[+m[1]].items[+m[2]];
+        if (it && state.done[k]) nd[it.id] = true;
+      } else if (state.done[k]) { nd[k] = true; }
+    });
+    state.done = nd;
+  }
+
   // ---------- Helpers ----------
   const fmtKRW = n => "₩" + Math.round(n).toLocaleString("en-US");
-  const dayDate = i => {
+  const fmtDate = ds => new Date(ds + "T00:00:00")
+    .toLocaleDateString("en-US", { weekday: "short", month: "short", day: "numeric" });
+  // The actual ISO date (YYYY-MM-DD) of a day: explicit day.date wins, else startDate + index.
+  const dayISO = i => {
+    const day = state.itinerary.days[i];
+    if (day && day.date) return day.date;
     if (!state.itinerary.startDate) return "";
     const d = new Date(state.itinerary.startDate + "T00:00:00");
     d.setDate(d.getDate() + i);
-    return d.toLocaleDateString("en-US", { weekday: "short", month: "short", day: "numeric" });
+    return d.toISOString().slice(0, 10);
   };
-  const key = (d, i) => `${d}-${i}`;
+  const dayDate = i => { const iso = dayISO(i); return iso ? fmtDate(iso) : ""; };
   function toast(msg) {
     const t = $("#toast");
     t.textContent = msg; t.hidden = false;
@@ -822,7 +898,7 @@ const TIPS = [
         .map((it, ii) => ({ it, ii }))
         .filter(({ it, ii }) => {
           if (!matchesFilters(it)) return false;
-          if (state.hideDone && state.done[key(di, ii)]) return false;
+          if (state.hideDone && state.done[it.id]) return false;
           return true;
         });
 
@@ -844,6 +920,7 @@ const TIPS = [
             </div>
           </div>
           <div class="day-meta">
+            <button class="day-edit-btn" data-editday="${di}" title="Edit day">✏️</button>
             <div class="day-cost">${fmtKRW(dayCost)}</div>
             <div>${day.items.length} stops</div>
           </div>
@@ -858,12 +935,20 @@ const TIPS = [
     if (!root.children.length) {
       root.innerHTML = `<p class="muted" style="text-align:center; padding:40px;">No activities match your search/filters.</p>`;
     }
+    // "Add day" row (hidden while searching/filtering to avoid confusion)
+    if (!state.search && !state.activeFilters.length) {
+      const row = document.createElement("div");
+      row.className = "add-day-row";
+      row.innerHTML = `<button id="add-day-inline">📅 Add another day</button>`;
+      row.querySelector("button").addEventListener("click", () => openDayModal(null));
+      root.appendChild(row);
+    }
   }
 
   function renderItem(day, di, it, ii) {
     const meta = TYPE_META[it.type] || TYPE_META.sight;
     const li = document.createElement("li");
-    const isDone = !!state.done[key(di, ii)];
+    const isDone = !!state.done[it.id];
     li.className = "item" + (isDone ? " done" : "");
     const hasCoords = Array.isArray(it.coords) && it.coords.length === 2;
     li.innerHTML = `
@@ -889,8 +974,7 @@ const TIPS = [
     // events
     $(".item-check", li).addEventListener("click", (e) => {
       e.stopPropagation();
-      const k = key(di, ii);
-      if (state.done[k]) delete state.done[k]; else state.done[k] = true;
+      if (state.done[it.id]) delete state.done[it.id]; else state.done[it.id] = true;
       save(); li.classList.toggle("done"); renderStats();
     });
     li.addEventListener("click", (e) => {
@@ -925,9 +1009,9 @@ const TIPS = [
   function renderStats() {
     const days = state.itinerary.days;
     let total = 0, count = 0, done = 0;
-    days.forEach((day, di) => day.items.forEach((it, ii) => {
+    days.forEach((day) => day.items.forEach((it) => {
       count++; total += Number(it.cost) || 0;
-      if (state.done[key(di, ii)]) done++;
+      if (state.done[it.id]) done++;
     }));
     $("#stat-days").textContent = days.length;
     $("#stat-activities").textContent = count;
@@ -993,13 +1077,49 @@ const TIPS = [
       sel.appendChild(o);
     });
   }
+  let editingId = null;  // id of the item being edited, or null when adding
+
+  function buildDaySelect(selectedIndex) {
+    const sel = $("#f-day");
+    sel.innerHTML = "";
+    state.itinerary.days.forEach((day, di) => {
+      const o = document.createElement("option");
+      o.value = String(di);
+      const date = dayDate(di);
+      o.textContent = `Day ${di + 1}${date ? " · " + date : ""} — ${day.title}`;
+      sel.appendChild(o);
+    });
+    const nw = document.createElement("option");
+    nw.value = "new"; nw.textContent = "➕ Create a new day…";
+    sel.appendChild(nw);
+    sel.value = selectedIndex == null ? "new" : String(selectedIndex);
+    toggleNewDayFields();
+  }
+  function toggleNewDayFields() {
+    const isNew = $("#f-day").value === "new";
+    $("#f-newday-fields").hidden = !isNew;
+    if (isNew && !$("#f-newdate").value) $("#f-newdate").value = nextDayISO();
+  }
+  function nextDayISO() {
+    const n = state.itinerary.days.length;
+    if (!state.itinerary.startDate && !(state.itinerary.days[n - 1] || {}).date) return "";
+    return dayISO(n - 1) ? addDaysISO(dayISO(n - 1), 1) : "";
+  }
+  function addDaysISO(iso, delta) {
+    const d = new Date(iso + "T00:00:00");
+    d.setDate(d.getDate() + delta);
+    return d.toISOString().slice(0, 10);
+  }
+
+  // ii: item index within day di. Pass (di, null) to add to a day, (null, null) to add (day chooser open).
   function openModal(di, ii) {
-    $("#f-dayIndex").value = di;
-    $("#f-itemIndex").value = ii == null ? "" : ii;
-    const editing = ii != null;
-    $("#modal-title").textContent = editing ? "Edit activity" : `Add activity · Day ${di + 1}`;
+    const editing = di != null && ii != null;
+    editingId = editing ? state.itinerary.days[di].items[ii].id : null;
+    $("#f-itemIndex").value = editing ? `${di}:${ii}` : "";
+    $("#modal-title").textContent = editing ? "Edit activity" : "Add activity";
     $("#f-delete").hidden = !editing;
     const it = editing ? state.itinerary.days[di].items[ii] : {};
+    buildDaySelect(editing ? di : (di != null ? di : (state.itinerary.days.length ? state.activeDay : null)));
     $("#f-time").value = it.time || "";
     $("#f-type").value = it.type || "sight";
     $("#f-name").value = it.name || "";
@@ -1010,55 +1130,119 @@ const TIPS = [
     $("#modal-backdrop").hidden = false;
     setTimeout(() => $("#f-name").focus(), 50);
   }
-  function closeModal() { $("#modal-backdrop").hidden = true; }
+  function closeModal() { $("#modal-backdrop").hidden = true; editingId = null; }
   function parseCoords(str) {
     if (!str.trim()) return null;
     const parts = str.split(",").map(s => parseFloat(s.trim()));
     if (parts.length === 2 && parts.every(n => !isNaN(n))) return parts;
     return null;
   }
+  function sortByTime(day) { day.items.sort((a, b) => (a.time || "99:99").localeCompare(b.time || "99:99")); }
+
   function saveActivity(e) {
     e.preventDefault();
-    const di = +$("#f-dayIndex").value;
-    const iiRaw = $("#f-itemIndex").value;
-    const item = {
+    const name = $("#f-name").value.trim();
+    if (!name) return;
+    const fields = {
       time: $("#f-time").value,
       type: $("#f-type").value,
-      name: $("#f-name").value.trim(),
+      name,
       cost: Number($("#f-cost").value) || 0,
       url: $("#f-url").value.trim(),
       notes: $("#f-notes").value.trim(),
       coords: parseCoords($("#f-coords").value)
     };
-    if (!item.name) return;
-    const day = state.itinerary.days[di];
-    if (iiRaw === "") {
-      day.items.push(item);
-      // keep chronological order by time
-      day.items.sort((a, b) => (a.time || "").localeCompare(b.time || ""));
-      toast("Activity added");
+
+    // Resolve target day (possibly creating a new one)
+    let targetIndex;
+    if ($("#f-day").value === "new") {
+      const title = $("#f-newtitle").value.trim() || `Day ${state.itinerary.days.length + 1}`;
+      state.itinerary.days.push({
+        title,
+        theme: $("#f-newtheme").value.trim(),
+        area: $("#f-newarea").value.trim() || "Seoul",
+        date: $("#f-newdate").value || undefined,
+        items: []
+      });
+      targetIndex = state.itinerary.days.length - 1;
     } else {
-      day.items[+iiRaw] = item;
-      toast("Activity updated");
+      targetIndex = +$("#f-day").value;
     }
+
+    if (editingId) {
+      // remove the existing item from wherever it currently lives, then re-add to target
+      for (const day of state.itinerary.days) {
+        const idx = day.items.findIndex(x => x.id === editingId);
+        if (idx >= 0) { day.items.splice(idx, 1); break; }
+      }
+      const moved = Object.assign({ id: editingId }, fields);
+      state.itinerary.days[targetIndex].items.push(moved);
+      sortByTime(state.itinerary.days[targetIndex]);
+      toast("Activity updated");
+    } else {
+      state.itinerary.days[targetIndex].items.push(Object.assign({ id: uid() }, fields));
+      sortByTime(state.itinerary.days[targetIndex]);
+      toast("Activity added");
+    }
+    state.activeDay = Math.min(targetIndex, state.itinerary.days.length - 1);
     save(); closeModal(); refreshAll();
   }
+
   function deleteActivity() {
-    const di = +$("#f-dayIndex").value;
-    const ii = +$("#f-itemIndex").value;
-    if (isNaN(ii)) return;
+    if (!editingId) return;
     if (!confirm("Delete this activity?")) return;
-    state.itinerary.days[di].items.splice(ii, 1);
-    // shift done flags for this day
-    const newDone = {};
-    Object.keys(state.done).forEach(k => {
-      const [d, i] = k.split("-").map(Number);
-      if (d !== di) { newDone[k] = state.done[k]; return; }
-      if (i < ii) newDone[k] = state.done[k];
-      else if (i > ii) newDone[key(d, i - 1)] = state.done[k];
-    });
-    state.done = newDone;
+    for (const day of state.itinerary.days) {
+      const idx = day.items.findIndex(x => x.id === editingId);
+      if (idx >= 0) { day.items.splice(idx, 1); break; }
+    }
+    delete state.done[editingId];
     save(); closeModal(); refreshAll(); toast("Deleted");
+  }
+
+  // ---------- Day modal (add/edit/delete a whole day) ----------
+  function openDayModal(di) {
+    const editing = di != null;
+    $("#d-index").value = editing ? di : "";
+    $("#day-modal-title").textContent = editing ? `Edit Day ${di + 1}` : "Add a new day";
+    $("#d-delete").hidden = !editing;
+    const day = editing ? state.itinerary.days[di] : {};
+    $("#d-date").value = editing ? dayISO(di) : nextDayISO();
+    $("#d-title").value = day.title || "";
+    $("#d-theme").value = day.theme || "";
+    $("#d-area").value = day.area || "";
+    $("#day-modal-backdrop").hidden = false;
+    setTimeout(() => $("#d-title").focus(), 50);
+  }
+  function closeDayModal() { $("#day-modal-backdrop").hidden = true; }
+  function saveDay(e) {
+    e.preventDefault();
+    const title = $("#d-title").value.trim();
+    if (!title) return;
+    const idxRaw = $("#d-index").value;
+    const data = {
+      title,
+      theme: $("#d-theme").value.trim(),
+      area: $("#d-area").value.trim() || "Seoul",
+      date: $("#d-date").value || undefined
+    };
+    if (idxRaw === "") {
+      state.itinerary.days.push(Object.assign(data, { items: [] }));
+      state.activeDay = state.itinerary.days.length - 1;
+      toast("Day added");
+    } else {
+      Object.assign(state.itinerary.days[+idxRaw], data);
+      toast("Day updated");
+    }
+    save(); closeDayModal(); refreshAll();
+  }
+  function deleteDay() {
+    const idx = +$("#d-index").value;
+    if (isNaN(idx)) return;
+    if (!confirm(`Delete Day ${idx + 1} and all its activities?`)) return;
+    (state.itinerary.days[idx].items || []).forEach(it => delete state.done[it.id]);
+    state.itinerary.days.splice(idx, 1);
+    state.activeDay = Math.max(0, Math.min(state.activeDay, state.itinerary.days.length - 1));
+    save(); closeDayModal(); refreshAll(); toast("Day deleted");
   }
 
   // ---------- Packing ----------
@@ -1122,8 +1306,10 @@ const TIPS = [
         const data = JSON.parse(reader.result);
         if (!data.itinerary || !Array.isArray(data.itinerary.days)) throw new Error("bad file");
         Object.assign(state, freshState(), data);
-        save(); applyTheme(); refreshAll(); renderPacking();
+        ensureIds(); migrateDone();
+        save(); applyTheme(); renderFilters(); refreshAll(); renderPacking();
         $("#start-date").value = state.itinerary.startDate || "";
+        $("#search").value = state.search || ""; $("#hide-done").checked = !!state.hideDone;
         toast("Imported successfully");
       } catch { alert("Could not import: invalid file."); }
     };
@@ -1149,6 +1335,7 @@ const TIPS = [
 
   // ---------- Init ----------
   function init() {
+    ensureIds(); migrateDone(); save();
     applyTheme();
     initMap();
     buildTypeSelect();
@@ -1200,26 +1387,40 @@ const TIPS = [
       if (!confirm("Reset everything to the default itinerary? Your changes will be lost.")) return;
       localStorage.removeItem(STORAGE_KEY);
       Object.assign(state, freshState());
+      ensureIds(); save();
       applyTheme(); $("#start-date").value = state.itinerary.startDate;
       $("#search").value = ""; $("#hide-done").checked = false;
       renderFilters(); renderPacking(); refreshAll(); toast("Reset to default");
     });
 
-    // add buttons (delegated)
+    // add/edit buttons (delegated)
     $("#itinerary").addEventListener("click", (e) => {
       const add = e.target.closest("[data-add]");
-      if (add) openModal(+add.dataset.add, null);
+      if (add) { openModal(+add.dataset.add, null); return; }
+      const editDay = e.target.closest("[data-editday]");
+      if (editDay) openDayModal(+editDay.dataset.editday);
     });
 
-    // modal
+    // top-level add buttons
+    $("#add-activity-btn").addEventListener("click", () => openModal(null, null));
+    $("#add-day-btn").addEventListener("click", () => openDayModal(null));
+
+    // activity modal
     $("#modal-close").addEventListener("click", closeModal);
     $("#modal-backdrop").addEventListener("click", (e) => { if (e.target.id === "modal-backdrop") closeModal(); });
     $("#activity-form").addEventListener("submit", saveActivity);
     $("#f-delete").addEventListener("click", deleteActivity);
+    $("#f-day").addEventListener("change", toggleNewDayFields);
+
+    // day modal
+    $("#day-modal-close").addEventListener("click", closeDayModal);
+    $("#day-modal-backdrop").addEventListener("click", (e) => { if (e.target.id === "day-modal-backdrop") closeDayModal(); });
+    $("#day-form").addEventListener("submit", saveDay);
+    $("#d-delete").addEventListener("click", deleteDay);
 
     // keyboard
     document.addEventListener("keydown", (e) => {
-      if (e.key === "Escape") { closeModal(); closeDrawer(); }
+      if (e.key === "Escape") { closeModal(); closeDayModal(); closeDrawer(); }
     });
 
     // sync active day on scroll

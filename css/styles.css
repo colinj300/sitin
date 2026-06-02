@@ -260,6 +260,21 @@ input:focus, select:focus, textarea:focus { outline: 2px solid var(--accent); ou
 .form-grid label { display: flex; flex-direction: column; gap: 4px; font-size: 12px; color: var(--muted); }
 .form-grid label.full { grid-column: 1 / -1; }
 .form-grid input, .form-grid select, .form-grid textarea { width: 100%; }
+.newday-fields {
+  border: 1px solid var(--border); border-radius: 12px; padding: 12px 14px 14px; margin-bottom: 12px;
+}
+.newday-fields legend { font-size: 12px; color: var(--accent); font-weight: 600; padding: 0 6px; }
+.day-header .day-edit-btn {
+  background: var(--surface); border: 1px solid var(--border); border-radius: 8px;
+  width: 30px; height: 30px; font-size: 13px; color: var(--muted); display: grid; place-items: center;
+}
+.day-header .day-edit-btn:hover { background: var(--accent-soft); color: var(--accent); }
+.add-day-row { text-align: center; padding: 6px 0 40px; }
+.add-day-row button {
+  border: 1.5px dashed var(--border); border-radius: 12px; background: var(--surface);
+  color: var(--muted); font-size: 14px; padding: 12px 22px;
+}
+.add-day-row button:hover { border-color: var(--accent); color: var(--accent); }
 
 /* Toast */
 .toast {
