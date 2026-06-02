@@ -1,0 +1,1249 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Seoul · 2-Week Interactive Itinerary</title>
+  <meta name="description" content="An interactive 2-week Seoul travel itinerary — map, budget tracker, checklist and more. No login, no API keys." />
+  <!-- Leaflet (free, OpenStreetMap — no API key needed) -->
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"
+        integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY=" crossorigin="" />
+  <style>
+:root {
+  --bg: #f4f6fb;
+  --surface: #ffffff;
+  --surface-2: #f0f3f9;
+  --text: #1a2233;
+  --muted: #5d6b85;
+  --border: #e2e8f3;
+  --accent: #4f46e5;
+  --accent-soft: #eef0ff;
+  --danger: #dc2626;
+  --shadow: 0 1px 3px rgba(20,30,60,.08), 0 8px 24px rgba(20,30,60,.06);
+  --radius: 14px;
+}
+[data-theme="dark"] {
+  --bg: #0e1320;
+  --surface: #171e30;
+  --surface-2: #1f2942;
+  --text: #e8edf7;
+  --muted: #9aa8c4;
+  --border: #2a3550;
+  --accent: #818cf8;
+  --accent-soft: #232c47;
+  --danger: #f87171;
+  --shadow: 0 1px 3px rgba(0,0,0,.4), 0 8px 24px rgba(0,0,0,.35);
+}
+
+* { box-sizing: border-box; }
+html { scroll-behavior: smooth; }
+body {
+  margin: 0;
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Noto Sans KR", sans-serif;
+  background: var(--bg);
+  color: var(--text);
+  line-height: 1.5;
+}
+h1, h2, h3 { margin: 0; }
+button { font-family: inherit; cursor: pointer; }
+input, select, textarea {
+  font-family: inherit;
+  font-size: 14px;
+  color: var(--text);
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 8px 10px;
+}
+input:focus, select:focus, textarea:focus { outline: 2px solid var(--accent); outline-offset: 1px; }
+.muted { color: var(--muted); }
+.small { font-size: 12px; }
+
+/* Topbar */
+.topbar {
+  display: flex; align-items: center; justify-content: space-between;
+  gap: 16px; padding: 14px 22px;
+  background: var(--surface); border-bottom: 1px solid var(--border);
+  position: sticky; top: 0; z-index: 50;
+}
+.brand { display: flex; align-items: center; gap: 12px; }
+.brand-logo { font-size: 32px; }
+.topbar h1 { font-size: 20px; letter-spacing: -.3px; }
+.subtitle { margin: 0; font-size: 12px; color: var(--muted); }
+.topbar-actions { display: flex; align-items: center; gap: 10px; }
+.trip-meta label { font-size: 11px; color: var(--muted); display: flex; flex-direction: column; gap: 2px; }
+.trip-meta input { padding: 5px 8px; }
+.icon-btn {
+  background: var(--surface-2); border: 1px solid var(--border);
+  border-radius: 10px; width: 38px; height: 38px; font-size: 17px;
+  display: grid; place-items: center; color: var(--text);
+}
+.icon-btn:hover { background: var(--accent-soft); }
+
+/* Summary */
+.summary {
+  display: flex; align-items: center; gap: 26px; flex-wrap: wrap;
+  padding: 14px 22px; background: var(--surface);
+  border-bottom: 1px solid var(--border); position: relative;
+}
+.summary-item { display: flex; flex-direction: column; }
+.summary-num { font-size: 22px; font-weight: 700; letter-spacing: -.5px; }
+.summary-label { font-size: 11px; color: var(--muted); text-transform: uppercase; letter-spacing: .5px; }
+.progress-wrap {
+  flex: 1; min-width: 120px; height: 8px; background: var(--surface-2);
+  border-radius: 99px; overflow: hidden;
+}
+.progress-bar { height: 100%; width: 0; background: linear-gradient(90deg, var(--accent), #22c55e); transition: width .4s; }
+
+/* Controls */
+.controls {
+  display: flex; align-items: center; gap: 14px; flex-wrap: wrap;
+  padding: 12px 22px; background: var(--bg);
+  position: sticky; top: 71px; z-index: 40; border-bottom: 1px solid var(--border);
+}
+#search { flex: 1; min-width: 200px; }
+.filters { display: flex; gap: 6px; flex-wrap: wrap; }
+.chip {
+  border: 1px solid var(--border); background: var(--surface);
+  border-radius: 99px; padding: 5px 11px; font-size: 12px; color: var(--muted);
+  display: inline-flex; align-items: center; gap: 5px; user-select: none;
+}
+.chip.active { background: var(--accent); color: #fff; border-color: var(--accent); }
+.checkbox-inline { font-size: 13px; color: var(--muted); display: flex; align-items: center; gap: 6px; }
+
+/* Layout */
+.layout {
+  display: grid;
+  grid-template-columns: 190px 1fr 40%;
+  gap: 0; align-items: start;
+  height: calc(100vh - 71px - 53px - 49px);
+}
+.day-rail {
+  overflow-y: auto; height: 100%; padding: 14px 10px;
+  border-right: 1px solid var(--border); background: var(--surface);
+}
+.day-rail button {
+  display: block; width: 100%; text-align: left; border: none; background: none;
+  padding: 9px 11px; border-radius: 10px; margin-bottom: 3px; color: var(--text);
+  font-size: 13px; line-height: 1.3;
+}
+.day-rail button:hover { background: var(--surface-2); }
+.day-rail button.active { background: var(--accent-soft); color: var(--accent); font-weight: 600; }
+.day-rail .rail-day { font-weight: 700; font-size: 12px; }
+.day-rail .rail-title { font-size: 12px; color: var(--muted); display: block; }
+.day-rail button.active .rail-title { color: var(--accent); }
+
+.itinerary { overflow-y: auto; height: 100%; padding: 18px 22px 60px; }
+.map-pane { height: 100%; position: relative; border-left: 1px solid var(--border); }
+#map { height: 100%; width: 100%; background: var(--surface-2); }
+.map-legend {
+  position: absolute; bottom: 14px; left: 14px; z-index: 500;
+  background: var(--surface); border: 1px solid var(--border); border-radius: 10px;
+  padding: 8px 10px; font-size: 11px; box-shadow: var(--shadow); display: flex; flex-wrap: wrap;
+  gap: 4px 12px; max-width: 230px;
+}
+.map-legend span { display: inline-flex; align-items: center; gap: 4px; color: var(--muted); }
+.dot { width: 10px; height: 10px; border-radius: 50%; display: inline-block; }
+
+/* Day cards */
+.day-card {
+  background: var(--surface); border: 1px solid var(--border);
+  border-radius: var(--radius); box-shadow: var(--shadow);
+  margin-bottom: 22px; overflow: hidden;
+}
+.day-header {
+  padding: 16px 18px; border-bottom: 1px solid var(--border);
+  display: flex; align-items: flex-start; justify-content: space-between; gap: 12px;
+  background: linear-gradient(135deg, var(--accent-soft), transparent);
+}
+.day-badge {
+  background: var(--accent); color: #fff; border-radius: 10px;
+  padding: 6px 10px; font-weight: 700; font-size: 12px; white-space: nowrap;
+  display: flex; flex-direction: column; align-items: center; line-height: 1.1;
+}
+.day-badge small { font-weight: 500; opacity: .85; font-size: 9px; }
+.day-headinfo h2 { font-size: 17px; }
+.day-headinfo .theme { font-size: 13px; color: var(--muted); }
+.day-headinfo .area { font-size: 11px; color: var(--accent); font-weight: 600; }
+.day-meta { text-align: right; font-size: 12px; color: var(--muted); white-space: nowrap; }
+.day-meta .day-cost { font-weight: 700; color: var(--text); font-size: 14px; }
+
+/* Activity items */
+.items { list-style: none; margin: 0; padding: 6px 0; }
+.item {
+  display: grid; grid-template-columns: 26px 56px 1fr auto; gap: 10px;
+  align-items: start; padding: 12px 18px; border-bottom: 1px solid var(--border);
+  position: relative; cursor: pointer; transition: background .15s;
+}
+.item:last-child { border-bottom: none; }
+.item:hover { background: var(--surface-2); }
+.item.done { opacity: .55; }
+.item.done .item-name { text-decoration: line-through; }
+.item-check { width: 20px; height: 20px; margin-top: 2px; accent-color: var(--accent); cursor: pointer; }
+.item-time { font-weight: 700; font-size: 13px; color: var(--muted); padding-top: 1px; }
+.item-body { min-width: 0; }
+.item-name { font-weight: 600; font-size: 14.5px; display: flex; align-items: center; gap: 7px; }
+.type-tag {
+  font-size: 10px; padding: 1px 7px; border-radius: 99px; color: #fff; font-weight: 600;
+  text-transform: uppercase; letter-spacing: .4px;
+}
+.item-notes { font-size: 12.5px; color: var(--muted); margin-top: 3px; }
+.item-links { margin-top: 5px; display: flex; gap: 10px; flex-wrap: wrap; }
+.item-links a, .item-links button {
+  font-size: 11.5px; color: var(--accent); background: none; border: none; padding: 0;
+  text-decoration: none; display: inline-flex; align-items: center; gap: 3px;
+}
+.item-links a:hover, .item-links button:hover { text-decoration: underline; }
+.item-right { text-align: right; }
+.item-cost { font-size: 13px; font-weight: 600; white-space: nowrap; }
+.add-item-btn {
+  width: calc(100% - 36px); margin: 6px 18px 14px; padding: 9px;
+  border: 1.5px dashed var(--border); border-radius: 10px; background: none;
+  color: var(--muted); font-size: 13px;
+}
+.add-item-btn:hover { border-color: var(--accent); color: var(--accent); }
+
+/* Buttons */
+.btn {
+  background: var(--surface-2); border: 1px solid var(--border); color: var(--text);
+  border-radius: 10px; padding: 9px 14px; font-size: 13px; font-weight: 500;
+}
+.btn:hover { background: var(--accent-soft); }
+.btn.primary { background: var(--accent); color: #fff; border-color: var(--accent); }
+.btn.primary:hover { filter: brightness(1.08); }
+.btn.small { padding: 7px 11px; font-size: 12px; }
+.btn.danger { color: var(--danger); }
+.btn-row { display: flex; gap: 8px; flex-wrap: wrap; }
+.btn-row.end { justify-content: flex-end; margin-top: 16px; }
+
+/* Drawer */
+.drawer-backdrop, .modal-backdrop {
+  position: fixed; inset: 0; background: rgba(10,15,30,.5); z-index: 100;
+}
+.drawer {
+  position: fixed; top: 0; right: 0; height: 100%; width: 380px; max-width: 92vw;
+  background: var(--surface); z-index: 101; box-shadow: -8px 0 30px rgba(0,0,0,.2);
+  overflow-y: auto; padding-bottom: 40px;
+}
+.drawer-head {
+  display: flex; align-items: center; justify-content: space-between;
+  padding: 16px 18px; border-bottom: 1px solid var(--border);
+  position: sticky; top: 0; background: var(--surface); z-index: 2;
+}
+.drawer-section { padding: 16px 18px; border-bottom: 1px solid var(--border); }
+.drawer-section h3 { font-size: 14px; margin-bottom: 8px; }
+.conv-row { display: grid; grid-template-columns: 1fr auto 1fr; gap: 8px; align-items: center; margin-bottom: 10px; }
+.drawer-section label.small { display: flex; flex-direction: column; gap: 4px; color: var(--muted); }
+.budget-breakdown { display: flex; flex-direction: column; gap: 6px; }
+.budget-row { display: flex; align-items: center; gap: 8px; font-size: 13px; }
+.budget-row .bar { flex: 1; height: 8px; background: var(--surface-2); border-radius: 99px; overflow: hidden; }
+.budget-row .bar > div { height: 100%; }
+.budget-row .amt { font-weight: 600; min-width: 78px; text-align: right; font-size: 12px; }
+
+.add-row { display: flex; gap: 6px; margin-bottom: 10px; }
+.add-row input { flex: 1; }
+.checklist { list-style: none; margin: 0; padding: 0; }
+.checklist li {
+  display: flex; align-items: center; gap: 8px; padding: 6px 0; font-size: 13px;
+  border-bottom: 1px solid var(--border);
+}
+.checklist li.done span { text-decoration: line-through; color: var(--muted); }
+.checklist li input { accent-color: var(--accent); }
+.checklist li .del { margin-left: auto; background: none; border: none; color: var(--muted); font-size: 15px; }
+.checklist li .del:hover { color: var(--danger); }
+
+.phrases { list-style: none; margin: 0; padding: 0; }
+.phrases li { padding: 7px 0; border-bottom: 1px solid var(--border); }
+.phrases .ko { font-size: 15px; font-weight: 600; }
+.phrases .rom { font-size: 12px; color: var(--accent); }
+.phrases .en { font-size: 12px; color: var(--muted); }
+.tips { margin: 0; padding-left: 18px; font-size: 13px; color: var(--muted); }
+.tips li { margin-bottom: 7px; }
+
+/* Modal */
+.modal {
+  position: fixed; top: 50%; left: 50%; transform: translate(-50%,-50%);
+  width: 520px; max-width: 94vw; max-height: 90vh; overflow-y: auto;
+  background: var(--surface); border-radius: var(--radius); z-index: 101; box-shadow: var(--shadow);
+}
+#activity-form { padding: 18px; }
+.form-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+.form-grid label { display: flex; flex-direction: column; gap: 4px; font-size: 12px; color: var(--muted); }
+.form-grid label.full { grid-column: 1 / -1; }
+.form-grid input, .form-grid select, .form-grid textarea { width: 100%; }
+
+/* Toast */
+.toast {
+  position: fixed; bottom: 24px; left: 50%; transform: translateX(-50%);
+  background: var(--text); color: var(--bg); padding: 11px 18px; border-radius: 10px;
+  font-size: 13px; z-index: 200; box-shadow: var(--shadow); animation: pop .25s;
+}
+@keyframes pop { from { opacity: 0; transform: translate(-50%, 10px); } }
+
+/* Leaflet popup tweaks */
+.leaflet-popup-content { font-size: 13px; }
+.leaflet-popup-content b { font-size: 14px; }
+.marker-num {
+  background: var(--accent); color: #fff; border-radius: 50%;
+  width: 26px; height: 26px; display: grid; place-items: center;
+  font-weight: 700; font-size: 12px; border: 2px solid #fff; box-shadow: 0 1px 4px rgba(0,0,0,.4);
+}
+
+/* Responsive */
+@media (max-width: 1100px) {
+  .layout { grid-template-columns: 160px 1fr; height: auto; }
+  .map-pane { grid-column: 1 / -1; height: 380px; border-left: none; border-top: 1px solid var(--border); }
+  .itinerary, .day-rail { height: auto; max-height: 70vh; }
+}
+@media (max-width: 680px) {
+  .layout { display: block; }
+  .day-rail {
+    display: flex; gap: 6px; overflow-x: auto; height: auto; border-right: none;
+    border-bottom: 1px solid var(--border); position: sticky; top: 120px; z-index: 30;
+  }
+  .day-rail button { width: auto; white-space: nowrap; }
+  .itinerary { max-height: none; }
+  .map-pane { height: 320px; }
+  .summary { gap: 16px; }
+  .summary-num { font-size: 18px; }
+  .item { grid-template-columns: 22px 48px 1fr; }
+  .item-right { grid-column: 2 / -1; text-align: left; }
+  .trip-meta { display: none; }
+}
+
+/* Print */
+@media print {
+  .topbar-actions, .controls, .day-rail, .map-pane, .add-item-btn, .item-check { display: none !important; }
+  .layout { display: block; height: auto; }
+  .itinerary { height: auto; overflow: visible; }
+  body { background: #fff; }
+  .day-card { break-inside: avoid; box-shadow: none; }
+}
+
+</style>
+  <link rel="preconnect" href="https://tile.openstreetmap.org" />
+</head>
+<body>
+  <header class="topbar">
+    <div class="brand">
+      <span class="brand-logo">🇰🇷</span>
+      <div>
+        <h1 id="trip-title">Seoul</h1>
+        <p class="subtitle">2-Week Interactive Itinerary</p>
+      </div>
+    </div>
+    <div class="topbar-actions">
+      <div class="trip-meta">
+        <label>Start date
+          <input type="date" id="start-date" />
+        </label>
+      </div>
+      <button id="theme-toggle" class="icon-btn" title="Toggle dark mode" aria-label="Toggle theme">🌙</button>
+      <button id="menu-btn" class="icon-btn" title="Tools" aria-label="Open tools">⚙️</button>
+    </div>
+  </header>
+
+  <!-- Progress + summary bar -->
+  <section class="summary">
+    <div class="summary-item">
+      <span class="summary-num" id="stat-days">14</span>
+      <span class="summary-label">Days</span>
+    </div>
+    <div class="summary-item">
+      <span class="summary-num" id="stat-activities">0</span>
+      <span class="summary-label">Activities</span>
+    </div>
+    <div class="summary-item">
+      <span class="summary-num" id="stat-done">0%</span>
+      <span class="summary-label">Completed</span>
+    </div>
+    <div class="summary-item">
+      <span class="summary-num" id="stat-budget">₩0</span>
+      <span class="summary-label">Est. budget / person</span>
+    </div>
+    <div class="progress-wrap" title="Trip progress">
+      <div class="progress-bar" id="progress-bar"></div>
+    </div>
+  </section>
+
+  <!-- Controls -->
+  <section class="controls">
+    <input type="search" id="search" placeholder="🔍 Search activities, food, places…" autocomplete="off" />
+    <div class="filters" id="type-filters"><!-- chips injected --></div>
+    <label class="checkbox-inline">
+      <input type="checkbox" id="hide-done" /> Hide completed
+    </label>
+  </section>
+
+  <main class="layout">
+    <!-- Day navigation -->
+    <nav class="day-rail" id="day-rail" aria-label="Day navigation"></nav>
+
+    <!-- Itinerary list -->
+    <div class="itinerary" id="itinerary"></div>
+
+    <!-- Map -->
+    <aside class="map-pane">
+      <div id="map"></div>
+      <div class="map-legend" id="map-legend"></div>
+    </aside>
+  </main>
+
+  <!-- Tools drawer -->
+  <div class="drawer-backdrop" id="drawer-backdrop" hidden></div>
+  <aside class="drawer" id="drawer" hidden aria-label="Tools">
+    <div class="drawer-head">
+      <h2>Trip Tools</h2>
+      <button class="icon-btn" id="drawer-close" aria-label="Close">✕</button>
+    </div>
+
+    <div class="drawer-section">
+      <h3>💱 Currency converter</h3>
+      <p class="muted small">Offline estimate — set your own rate. Default: 1 USD ≈ 1370 KRW.</p>
+      <div class="conv-row">
+        <input type="number" id="conv-krw" placeholder="KRW (₩)" />
+        <span>⇄</span>
+        <input type="number" id="conv-usd" placeholder="USD ($)" />
+      </div>
+      <label class="small">Rate (KRW per 1 USD)
+        <input type="number" id="conv-rate" value="1370" />
+      </label>
+    </div>
+
+    <div class="drawer-section">
+      <h3>💰 Budget by category</h3>
+      <div id="budget-breakdown" class="budget-breakdown"></div>
+    </div>
+
+    <div class="drawer-section">
+      <h3>🧳 Packing checklist</h3>
+      <div class="add-row">
+        <input type="text" id="packing-input" placeholder="Add item…" />
+        <button id="packing-add" class="btn small">Add</button>
+      </div>
+      <ul class="checklist" id="packing-list"></ul>
+    </div>
+
+    <div class="drawer-section">
+      <h3>🗣️ Handy Korean phrases</h3>
+      <ul class="phrases" id="phrases-list"></ul>
+    </div>
+
+    <div class="drawer-section">
+      <h3>💡 Travel tips</h3>
+      <ul class="tips" id="tips-list"></ul>
+    </div>
+
+    <div class="drawer-section">
+      <h3>💾 Your data</h3>
+      <p class="muted small">Everything is saved in your browser (localStorage). Nothing leaves your device.</p>
+      <div class="btn-row">
+        <button id="export-btn" class="btn small">⬇ Export</button>
+        <button id="import-btn" class="btn small">⬆ Import</button>
+        <button id="print-btn" class="btn small">🖨 Print</button>
+        <button id="reset-btn" class="btn small danger">↺ Reset</button>
+      </div>
+      <input type="file" id="import-file" accept="application/json" hidden />
+    </div>
+  </aside>
+
+  <!-- Add / edit activity modal -->
+  <div class="modal-backdrop" id="modal-backdrop" hidden>
+    <div class="modal" role="dialog" aria-modal="true" aria-labelledby="modal-title">
+      <div class="drawer-head">
+        <h2 id="modal-title">Add activity</h2>
+        <button class="icon-btn" id="modal-close" aria-label="Close">✕</button>
+      </div>
+      <form id="activity-form">
+        <input type="hidden" id="f-dayIndex" />
+        <input type="hidden" id="f-itemIndex" />
+        <div class="form-grid">
+          <label>Time <input type="time" id="f-time" /></label>
+          <label>Type
+            <select id="f-type"></select>
+          </label>
+          <label class="full">Name <input type="text" id="f-name" required placeholder="e.g. Lunch at…" /></label>
+          <label>Cost (₩) <input type="number" id="f-cost" min="0" placeholder="0" /></label>
+          <label>Link (URL) <input type="url" id="f-url" placeholder="https://…" /></label>
+          <label class="full">Notes <textarea id="f-notes" rows="2" placeholder="Details, reservations, tips…"></textarea></label>
+          <label class="full">Coordinates (lat, lng — optional)
+            <input type="text" id="f-coords" placeholder="37.5665, 126.9780" />
+          </label>
+        </div>
+        <div class="btn-row end">
+          <button type="button" class="btn" id="f-delete" hidden>Delete</button>
+          <button type="submit" class="btn primary">Save</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <div id="toast" class="toast" hidden></div>
+
+  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"
+          integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo=" crossorigin=""></script>
+  <script>
+/* Seoul 2-Week Itinerary — default data
+ * Costs are rough estimates in KRW (₩). type: sight|food|activity|transport|rest|shopping
+ * coords: [lat, lng]. All places are real with approximate coordinates.
+ */
+const DEFAULT_ITINERARY = {
+  title: "Seoul · 2-Week Adventure",
+  startDate: "2026-06-01",
+  days: [
+    {
+      title: "Arrival & Myeongdong",
+      theme: "Settle in, first taste of the city",
+      area: "Jung-gu",
+      items: [
+        { time: "14:00", type: "transport", name: "Arrive Incheon (ICN) → AREX train", cost: 4750, coords: [37.4602, 126.4407], notes: "AREX All-Stop to Seoul Station (~60 min). T-money card recommended.", url: "https://www.arex.or.kr/main.do" },
+        { time: "16:00", type: "rest", name: "Check in to hotel", cost: 0, coords: [37.5636, 126.9826], notes: "Drop bags, freshen up. Myeongdong is central & convenient." },
+        { time: "18:00", type: "food", name: "Myeongdong Street Food", cost: 15000, coords: [37.5637, 126.9850], notes: "Tornado potato, hotteok, gyeranppang, lobster cheese. Cash helps." },
+        { time: "20:00", type: "shopping", name: "Myeongdong Shopping & Cosmetics", cost: 0, coords: [37.5609, 126.9858], notes: "Skincare flagship stores (Olive Young), fashion. Tax-free over ₩15,000." },
+        { time: "21:30", type: "sight", name: "Namsangol Hanok Village (evening stroll)", cost: 0, coords: [37.5591, 126.9940], notes: "Quiet traditional houses, lit up at night." }
+      ]
+    },
+    {
+      title: "Palaces & Old Seoul",
+      theme: "Joseon-era grandeur",
+      area: "Jongno-gu",
+      items: [
+        { time: "09:00", type: "sight", name: "Gyeongbokgung Palace", cost: 3000, coords: [37.5796, 126.9770], notes: "Wear a hanbok (rental ~₩15k) to enter free! Catch the Changing of the Guard at 10:00.", url: "https://www.royalpalace.go.kr/" },
+        { time: "11:00", type: "sight", name: "National Folk Museum of Korea", cost: 0, coords: [37.5817, 126.9799], notes: "Inside palace grounds. Free entry." },
+        { time: "12:30", type: "food", name: "Tosokchon Samgyetang", cost: 20000, coords: [37.5790, 126.9718], notes: "Famous ginseng chicken soup. Expect a queue at lunch." },
+        { time: "14:00", type: "sight", name: "Bukchon Hanok Village", cost: 0, coords: [37.5826, 126.9830], notes: "Photogenic alleys. Be respectful — people live here, keep quiet." },
+        { time: "16:00", type: "activity", name: "Insadong Art Street", cost: 0, coords: [37.5740, 126.9849], notes: "Galleries, tea houses, Ssamzigil mall, traditional crafts." },
+        { time: "18:30", type: "food", name: "Gwangjang Market dinner", cost: 12000, coords: [37.5701, 126.9999], notes: "Bindaetteok (mung bean pancake), mayak gimbap, live octopus if brave." }
+      ]
+    },
+    {
+      title: "Namsan & Itaewon",
+      theme: "City views and global flavors",
+      area: "Yongsan-gu",
+      items: [
+        { time: "10:00", type: "activity", name: "Namsan Cable Car", cost: 14000, coords: [37.5512, 126.9882], notes: "Round trip. Or hike up (~30 min) for free." },
+        { time: "10:45", type: "sight", name: "N Seoul Tower", cost: 16000, coords: [37.5512, 126.9882], notes: "Observation deck + love locks. Great panoramic views.", url: "https://www.nseoultower.co.kr/" },
+        { time: "13:00", type: "food", name: "Itaewon lunch (global cuisine)", cost: 18000, coords: [37.5345, 126.9945], notes: "Kebabs, Thai, burgers — the international district." },
+        { time: "15:00", type: "sight", name: "War Memorial of Korea", cost: 0, coords: [37.5369, 126.9774], notes: "Free, excellent museum on Korean War history. Outdoor tank/jet exhibits." },
+        { time: "18:00", type: "activity", name: "Gyeongnidan-gil & Haebangchon", cost: 0, coords: [37.5390, 126.9890], notes: "Trendy hillside cafes, craft beer, sunset city views." }
+      ]
+    },
+    {
+      title: "Hongdae Youth Culture",
+      theme: "Indie, street art, nightlife",
+      area: "Mapo-gu",
+      items: [
+        { time: "11:00", type: "activity", name: "Hongdae Free Market & street performances", cost: 0, coords: [37.5563, 126.9236], notes: "Buskers, art market (weekends), youthful energy." },
+        { time: "12:30", type: "food", name: "Korean BBQ lunch", cost: 25000, coords: [37.5558, 126.9230], notes: "Samgyeopsal (pork belly) — grill it yourself." },
+        { time: "14:30", type: "activity", name: "Trick Eye Museum / themed cafes", cost: 17000, coords: [37.5546, 126.9220], notes: "Interactive 3D art. Or hop the famous animal & dessert cafes." },
+        { time: "16:30", type: "sight", name: "Yeonnam-dong & Gyeongui Line Forest Park", cost: 0, coords: [37.5610, 126.9250], notes: "'Yeontral Park' — linear park, brunch spots, boutiques." },
+        { time: "20:00", type: "activity", name: "Hongdae nightlife", cost: 20000, coords: [37.5547, 126.9258], notes: "Clubs, live music, noraebang (karaoke). Stays lively till dawn." }
+      ]
+    },
+    {
+      title: "Gangnam & COEX",
+      theme: "Modern, upscale Seoul",
+      area: "Gangnam-gu",
+      items: [
+        { time: "10:00", type: "sight", name: "Bongeunsa Temple", cost: 0, coords: [37.5150, 127.0573], notes: "Serene Buddhist temple amid skyscrapers. Temple-stay programs available." },
+        { time: "11:30", type: "sight", name: "Starfield Library (COEX Mall)", cost: 0, coords: [37.5126, 127.0590], notes: "Iconic giant open library. Free, very photogenic." },
+        { time: "13:00", type: "food", name: "COEX food court / Mall dining", cost: 15000, coords: [37.5118, 127.0590], notes: "Huge underground mall, aquarium, SMTOWN (K-pop)." },
+        { time: "15:00", type: "activity", name: "Gangnam Style & Apgujeong Rodeo", cost: 0, coords: [37.5273, 127.0286], notes: "Luxury shopping, K-pop entertainment HQs, plastic surgery alley." },
+        { time: "18:00", type: "sight", name: "Banpo Bridge Rainbow Fountain", cost: 0, coords: [37.5126, 126.9966], notes: "Evening light & water show (Apr–Oct). Picnic at Banpo Hangang Park." }
+      ]
+    },
+    {
+      title: "DMZ Day Trip",
+      theme: "The world's most fortified border",
+      area: "Paju / Gyeonggi-do",
+      items: [
+        { time: "07:30", type: "transport", name: "Join DMZ tour (pickup)", cost: 60000, coords: [37.5636, 126.9826], notes: "Book a guided tour in advance (passport required). Imjingak departure." },
+        { time: "09:30", type: "sight", name: "Imjingak Park & Freedom Bridge", cost: 0, coords: [37.8895, 126.7400], notes: "Memorials, rusted train, ribbons of hope." },
+        { time: "11:00", type: "sight", name: "3rd Infiltration Tunnel", cost: 0, coords: [37.9320, 126.7080], notes: "Walk into a tunnel dug by North Korea. No photos inside." },
+        { time: "12:30", type: "sight", name: "Dora Observatory", cost: 0, coords: [37.9355, 126.7090], notes: "Telescopes overlooking North Korea." },
+        { time: "16:00", type: "transport", name: "Return to Seoul", cost: 0, coords: [37.5636, 126.9826], notes: "Tour drops back in central Seoul." },
+        { time: "19:00", type: "food", name: "Easy dinner near hotel", cost: 12000, coords: [37.5636, 126.9826], notes: "Rest — long day." }
+      ]
+    },
+    {
+      title: "Dongdaemun & Markets",
+      theme: "Shopping, design, night markets",
+      area: "Jung-gu",
+      items: [
+        { time: "11:00", type: "sight", name: "Dongdaemun Design Plaza (DDP)", cost: 0, coords: [37.5669, 127.0095], notes: "Zaha Hadid landmark. Exhibitions, LED rose garden at night.", url: "https://www.ddp.or.kr/" },
+        { time: "13:00", type: "food", name: "Majang-dong / local lunch", cost: 14000, coords: [37.5700, 127.0240], notes: "Or grab makgeolli + jeon nearby." },
+        { time: "15:00", type: "shopping", name: "Dongdaemun fashion wholesale", cost: 0, coords: [37.5663, 127.0090], notes: "Doota, Migliore — many shops run late into the night." },
+        { time: "18:00", type: "activity", name: "Cheonggyecheon Stream walk", cost: 0, coords: [37.5696, 126.9784], notes: "Restored urban stream, lovely at dusk." },
+        { time: "20:00", type: "food", name: "Gwangjang or Dongdaemun night market", cost: 13000, coords: [37.5701, 126.9999], notes: "Street eats, late-night energy." }
+      ]
+    },
+    {
+      title: "Nami Island Day Trip",
+      theme: "Tree-lined romance & nature",
+      area: "Chuncheon / Gangwon",
+      items: [
+        { time: "08:00", type: "transport", name: "ITX-Cheong to Gapyeong", cost: 9000, coords: [37.5547, 126.9707], notes: "From Yongsan/Cheongnyangni (~1hr). Or Gyeongchun subway line." },
+        { time: "10:00", type: "sight", name: "Nami Island (ferry + entry)", cost: 16000, coords: [37.7906, 127.5256], notes: "Famous metasequoia lanes (Winter Sonata). Bike rentals available." },
+        { time: "13:00", type: "food", name: "Chuncheon Dakgalbi", cost: 16000, coords: [37.7900, 127.5260], notes: "Spicy stir-fried chicken — the regional specialty." },
+        { time: "14:30", type: "activity", name: "Petite France / Garden of Morning Calm", cost: 12000, coords: [37.7720, 127.4860], notes: "Pick one. Garden is gorgeous; Petite France is whimsical." },
+        { time: "18:00", type: "transport", name: "Return to Seoul", cost: 9000, coords: [37.5547, 126.9707], notes: "Relax on the train back." }
+      ]
+    },
+    {
+      title: "Murals, Hilltops & Hanok",
+      theme: "Hidden creative corners",
+      area: "Jongno-gu",
+      items: [
+        { time: "10:00", type: "sight", name: "Ihwa Mural Village", cost: 0, coords: [37.5790, 127.0060], notes: "Hillside art village. Quiet streets, painted stairs." },
+        { time: "11:30", type: "activity", name: "Naksan Park & Seoul City Wall", cost: 0, coords: [37.5805, 127.0073], notes: "Walk a stretch of the fortress wall with great views." },
+        { time: "13:00", type: "food", name: "Daehangno lunch (Hyehwa)", cost: 13000, coords: [37.5821, 127.0019], notes: "Theater district, lots of cafes and student eats." },
+        { time: "15:00", type: "sight", name: "Changdeokgung & Secret Garden", cost: 8000, coords: [37.5794, 126.9910], notes: "UNESCO site. Huwon (Secret Garden) needs a timed guided ticket.", url: "https://www.cdg.go.kr/" },
+        { time: "18:00", type: "food", name: "Ikseon-dong Hanok alleys dinner", cost: 18000, coords: [37.5740, 126.9905], notes: "Trendy restored hanok lanes, atmospheric restaurants & bars." }
+      ]
+    },
+    {
+      title: "Seongsu & Seoul Forest",
+      theme: "Brooklyn of Seoul — cafes & design",
+      area: "Seongdong-gu",
+      items: [
+        { time: "10:30", type: "sight", name: "Seoul Forest Park", cost: 0, coords: [37.5444, 127.0374], notes: "Deer park, wetlands, art. Free and spacious." },
+        { time: "12:00", type: "food", name: "Seongsu-dong brunch", cost: 17000, coords: [37.5444, 127.0557], notes: "Converted warehouse cafes, specialty coffee." },
+        { time: "14:00", type: "shopping", name: "Seongsu concept stores & pop-ups", cost: 0, coords: [37.5445, 127.0560], notes: "Flagship brand spaces (often free exhibitions), boutiques." },
+        { time: "16:00", type: "activity", name: "Ttukseom Hangang Park", cost: 0, coords: [37.5310, 127.0660], notes: "River park — rent a bike, ramyeon by the water." },
+        { time: "19:00", type: "food", name: "Konjiam / local Korean dinner", cost: 16000, coords: [37.5445, 127.0560], notes: "Try jokbal (braised pig's trotters) or naengmyeon." }
+      ]
+    },
+    {
+      title: "Lotte World & Jamsil",
+      theme: "Theme park fun",
+      area: "Songpa-gu",
+      items: [
+        { time: "10:00", type: "activity", name: "Lotte World (Adventure + Magic Island)", cost: 62000, coords: [37.5111, 127.0980], notes: "Largest indoor theme park. Buy day pass online for slight discount.", url: "https://adventure.lotteworld.com/" },
+        { time: "13:00", type: "food", name: "Lunch inside park / food street", cost: 14000, coords: [37.5111, 127.0980], notes: "Plenty of options on site." },
+        { time: "17:00", type: "sight", name: "Lotte World Tower & Seoul Sky", cost: 29000, coords: [37.5125, 127.1025], notes: "One of the world's tallest towers — sunset from the observatory." },
+        { time: "19:00", type: "sight", name: "Seokchon Lake (evening)", cost: 0, coords: [37.5095, 127.1010], notes: "Pleasant lakeside loop, lit up at night." }
+      ]
+    },
+    {
+      title: "Suwon Hwaseong Day Trip",
+      theme: "Fortress walls & history",
+      area: "Suwon / Gyeonggi-do",
+      items: [
+        { time: "09:00", type: "transport", name: "Subway/Train to Suwon", cost: 2000, coords: [37.5547, 126.9707], notes: "Line 1 to Suwon Station (~1hr)." },
+        { time: "10:30", type: "sight", name: "Hwaseong Fortress walk", cost: 1000, coords: [37.2880, 127.0150], notes: "UNESCO 18th-century fortress. Walk the full ~5.7km wall loop." },
+        { time: "12:30", type: "activity", name: "Hwaseong Haenggung Palace", cost: 1500, coords: [37.2810, 127.0130], notes: "Royal travel palace; martial arts demos some days." },
+        { time: "13:30", type: "food", name: "Suwon Wang Galbi", cost: 25000, coords: [37.2820, 127.0170], notes: "Suwon's famous king-sized beef ribs." },
+        { time: "15:30", type: "activity", name: "Flying Suwon balloon / Haenggungdong cafe street", cost: 8000, coords: [37.2830, 127.0120], notes: "Tethered helium balloon ride + mural village cafes." },
+        { time: "18:00", type: "transport", name: "Return to Seoul", cost: 2000, coords: [37.5547, 126.9707], notes: "" }
+      ]
+    },
+    {
+      title: "Museums & Hangang",
+      theme: "Culture and the river",
+      area: "Yongsan-gu",
+      items: [
+        { time: "10:00", type: "sight", name: "National Museum of Korea", cost: 0, coords: [37.5240, 126.9803], notes: "Free, world-class. Don't miss the Pensive Bodhisattva.", url: "https://www.museum.go.kr/" },
+        { time: "13:00", type: "food", name: "Lunch near Ichon", cost: 13000, coords: [37.5220, 126.9760], notes: "" },
+        { time: "14:30", type: "activity", name: "Yongsan Electronics / I'Park Mall", cost: 0, coords: [37.5298, 126.9648], notes: "Gadgets galore, or skip for more river time." },
+        { time: "16:00", type: "activity", name: "Hangang River cruise", cost: 16000, coords: [37.5174, 126.9966], notes: "Yeouido ferry — sunset cruise is lovely.", url: "https://www.elandcruise.com/" },
+        { time: "18:30", type: "sight", name: "Yeouido Hangang Park picnic", cost: 10000, coords: [37.5285, 126.9330], notes: "Order chicken & beer ('chimaek') to the park via app." }
+      ]
+    },
+    {
+      title: "Last Bites & Departure",
+      theme: "Souvenirs and farewell",
+      area: "Jung-gu",
+      items: [
+        { time: "09:00", type: "shopping", name: "Last-minute souvenirs", cost: 30000, coords: [37.5609, 126.9858], notes: "Snacks, K-beauty, gifts. Namdaemun Market is great & cheap." },
+        { time: "10:30", type: "food", name: "Final Korean breakfast/brunch", cost: 12000, coords: [37.5594, 126.9776], notes: "Maybe gukbap or a last bowl of bibimbap." },
+        { time: "12:00", type: "rest", name: "Pack & check out", cost: 0, coords: [37.5636, 126.9826], notes: "Claim VAT refund at the airport for tax-free purchases." },
+        { time: "13:30", type: "transport", name: "Head to Incheon (AREX)", cost: 4750, coords: [37.5547, 126.9707], notes: "Allow 3+ hours before international flight." }
+      ]
+    }
+  ]
+};
+
+const TYPE_META = {
+  sight:     { label: "Sight",     icon: "🏛️", color: "#3b82f6" },
+  food:      { label: "Food",      icon: "🍜", color: "#ef4444" },
+  activity:  { label: "Activity",  icon: "🎟️", color: "#8b5cf6" },
+  transport: { label: "Transport", icon: "🚇", color: "#10b981" },
+  shopping:  { label: "Shopping",  icon: "🛍️", color: "#f59e0b" },
+  rest:      { label: "Rest",      icon: "🏨", color: "#64748b" }
+};
+
+// Handy phrases for travelers
+const PHRASES = [
+  { ko: "안녕하세요", rom: "Annyeonghaseyo", en: "Hello" },
+  { ko: "감사합니다", rom: "Gamsahamnida", en: "Thank you" },
+  { ko: "얼마예요?", rom: "Eolmayeyo?", en: "How much is it?" },
+  { ko: "이거 주세요", rom: "Igeo juseyo", en: "I'll have this, please" },
+  { ko: "화장실 어디예요?", rom: "Hwajangsil eodiyeyo?", en: "Where is the bathroom?" },
+  { ko: "맛있어요", rom: "Masisseoyo", en: "It's delicious" },
+  { ko: "계산서 주세요", rom: "Gyesanseo juseyo", en: "Check, please" },
+  { ko: "영어 하세요?", rom: "Yeongeo haseyo?", en: "Do you speak English?" },
+  { ko: "도와주세요", rom: "Dowajuseyo", en: "Please help me" },
+  { ko: "안 매워요?", rom: "An maewoyo?", en: "Is it not spicy?" }
+];
+
+const TIPS = [
+  "Get a T-money card at any convenience store — tap for subway, bus, and even some taxis.",
+  "Subway is the easiest way around. Use the Naver Map or KakaoMap app (Google Maps is limited in Korea).",
+  "Free public Wi-Fi is everywhere, but a rental SIM/eSIM or pocket Wi-Fi is worth it.",
+  "Convenience stores (CU, GS25, 7-Eleven) are lifesavers — meals, cash, umbrellas, SIM cards.",
+  "Tipping is not customary in Korea. The price is the price.",
+  "Many palaces are closed on different weekdays — Gyeongbokgung closes Tuesdays.",
+  "Tax-free shopping: spend ₩15,000+ at participating stores and claim a refund at the airport.",
+  "Cafés are everywhere and double as workspaces/rest stops — use them to recharge."
+];
+
+</script>
+  <script>
+/* Seoul Itinerary — app logic. No frameworks, no API keys. State in localStorage. */
+(function () {
+  "use strict";
+
+  const STORAGE_KEY = "seoul-itinerary-v1";
+  const $ = (s, el = document) => el.querySelector(s);
+  const $ = (s, el = document) => Array.from(el.querySelectorAll(s));
+
+  // ---------- State ----------
+  const state = load();
+
+  function freshState() {
+    return {
+      itinerary: structuredClone(DEFAULT_ITINERARY),
+      done: {},            // "d-i" -> true
+      packing: defaultPacking(),
+      theme: "light",
+      activeFilters: [],   // type filter; empty = all
+      search: "",
+      hideDone: false,
+      rate: 1370,
+      activeDay: 0
+    };
+  }
+  function defaultPacking() {
+    return [
+      "Passport & copies", "T-money card", "Universal power adapter (Type C/F)",
+      "Comfortable walking shoes", "Portable charger", "Rain jacket / umbrella",
+      "Reusable water bottle", "Hand sanitizer & tissues", "Translation app (Papago)",
+      "eSIM / pocket Wi-Fi"
+    ].map(t => ({ text: t, done: false }));
+  }
+  function load() {
+    try {
+      const raw = localStorage.getItem(STORAGE_KEY);
+      if (!raw) return freshState();
+      const parsed = JSON.parse(raw);
+      return Object.assign(freshState(), parsed);
+    } catch { return freshState(); }
+  }
+  function save() {
+    try { localStorage.setItem(STORAGE_KEY, JSON.stringify(state)); } catch {}
+  }
+
+  // ---------- Helpers ----------
+  const fmtKRW = n => "₩" + Math.round(n).toLocaleString("en-US");
+  const dayDate = i => {
+    if (!state.itinerary.startDate) return "";
+    const d = new Date(state.itinerary.startDate + "T00:00:00");
+    d.setDate(d.getDate() + i);
+    return d.toLocaleDateString("en-US", { weekday: "short", month: "short", day: "numeric" });
+  };
+  const key = (d, i) => `${d}-${i}`;
+  function toast(msg) {
+    const t = $("#toast");
+    t.textContent = msg; t.hidden = false;
+    clearTimeout(t._t);
+    t._t = setTimeout(() => (t.hidden = true), 2200);
+  }
+
+  // ---------- Map ----------
+  let map, markerLayer, routeLayer;
+  function initMap() {
+    map = L.map("map", { zoomControl: true, scrollWheelZoom: true }).setView([37.5665, 126.9780], 11);
+    L.tileLayer("https://tile.openstreetmap.org/{z}/{x}/{y}.png", {
+      maxZoom: 19,
+      attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
+    }).addTo(map);
+    markerLayer = L.layerGroup().addTo(map);
+    routeLayer = L.layerGroup().addTo(map);
+  }
+  function renderMap() {
+    if (!map) return;
+    markerLayer.clearLayers();
+    routeLayer.clearLayers();
+    const day = state.itinerary.days[state.activeDay];
+    if (!day) return;
+    const pts = [];
+    day.items.forEach((it, i) => {
+      if (!Array.isArray(it.coords) || it.coords.length !== 2) return;
+      const meta = TYPE_META[it.type] || TYPE_META.sight;
+      const icon = L.divIcon({
+        className: "",
+        html: `<div class="marker-num" style="background:${meta.color}">${i + 1}</div>`,
+        iconSize: [26, 26], iconAnchor: [13, 13]
+      });
+      const m = L.marker(it.coords, { icon }).addTo(markerLayer);
+      m.bindPopup(
+        `<b>${escapeHtml(it.name)}</b><br>${meta.icon} ${meta.label}` +
+        (it.time ? ` · ${it.time}` : "") +
+        (it.cost ? `<br>${fmtKRW(it.cost)}` : "") +
+        (it.notes ? `<br><span style="color:#666">${escapeHtml(it.notes)}</span>` : "")
+      );
+      pts.push(it.coords);
+    });
+    if (pts.length > 1) {
+      L.polyline(pts, { color: "#4f46e5", weight: 3, opacity: .5, dashArray: "6 8" }).addTo(routeLayer);
+    }
+    if (pts.length) map.fitBounds(pts, { padding: [50, 50], maxZoom: 15 });
+  }
+  function flyTo(coords) {
+    if (map && coords) { map.flyTo(coords, 16, { duration: .6 }); }
+  }
+
+  // ---------- Render itinerary ----------
+  function matchesFilters(it) {
+    if (state.activeFilters.length && !state.activeFilters.includes(it.type)) return false;
+    if (state.search) {
+      const q = state.search.toLowerCase();
+      const hay = `${it.name} ${it.notes || ""} ${it.type}`.toLowerCase();
+      if (!hay.includes(q)) return false;
+    }
+    return true;
+  }
+
+  function renderItinerary() {
+    const root = $("#itinerary");
+    root.innerHTML = "";
+    state.itinerary.days.forEach((day, di) => {
+      const visibleItems = day.items
+        .map((it, ii) => ({ it, ii }))
+        .filter(({ it, ii }) => {
+          if (!matchesFilters(it)) return false;
+          if (state.hideDone && state.done[key(di, ii)]) return false;
+          return true;
+        });
+
+      // When searching/filtering, hide days with no matches
+      if ((state.search || state.activeFilters.length) && !visibleItems.length) return;
+
+      const dayCost = day.items.reduce((s, it) => s + (Number(it.cost) || 0), 0);
+      const card = document.createElement("section");
+      card.className = "day-card";
+      card.id = `day-${di}`;
+      card.innerHTML = `
+        <div class="day-header">
+          <div style="display:flex; gap:14px; align-items:flex-start;">
+            <div class="day-badge">Day ${di + 1}<small>${dayDate(di) || "&nbsp;"}</small></div>
+            <div class="day-headinfo">
+              <h2>${escapeHtml(day.title)}</h2>
+              <div class="theme">${escapeHtml(day.theme || "")}</div>
+              <div class="area">📍 ${escapeHtml(day.area || "Seoul")}</div>
+            </div>
+          </div>
+          <div class="day-meta">
+            <div class="day-cost">${fmtKRW(dayCost)}</div>
+            <div>${day.items.length} stops</div>
+          </div>
+        </div>
+        <ul class="items"></ul>
+        <button class="add-item-btn" data-add="${di}">+ Add activity to Day ${di + 1}</button>
+      `;
+      const ul = $(".items", card);
+      visibleItems.forEach(({ it, ii }) => ul.appendChild(renderItem(day, di, it, ii)));
+      root.appendChild(card);
+    });
+    if (!root.children.length) {
+      root.innerHTML = `<p class="muted" style="text-align:center; padding:40px;">No activities match your search/filters.</p>`;
+    }
+  }
+
+  function renderItem(day, di, it, ii) {
+    const meta = TYPE_META[it.type] || TYPE_META.sight;
+    const li = document.createElement("li");
+    const isDone = !!state.done[key(di, ii)];
+    li.className = "item" + (isDone ? " done" : "");
+    const hasCoords = Array.isArray(it.coords) && it.coords.length === 2;
+    li.innerHTML = `
+      <input type="checkbox" class="item-check" ${isDone ? "checked" : ""} title="Mark done" />
+      <div class="item-time">${escapeHtml(it.time || "")}</div>
+      <div class="item-body">
+        <div class="item-name">
+          ${escapeHtml(it.name)}
+          <span class="type-tag" style="background:${meta.color}">${meta.icon} ${meta.label}</span>
+        </div>
+        ${it.notes ? `<div class="item-notes">${escapeHtml(it.notes)}</div>` : ""}
+        <div class="item-links">
+          ${hasCoords ? `<button data-focus="${di}-${ii}">📍 Show on map</button>` : ""}
+          ${hasCoords ? `<a href="https://www.openstreetmap.org/?mlat=${it.coords[0]}&mlon=${it.coords[1]}#map=16/${it.coords[0]}/${it.coords[1]}" target="_blank" rel="noopener">🗺 Open map</a>` : ""}
+          ${it.url ? `<a href="${escapeAttr(it.url)}" target="_blank" rel="noopener">🔗 Website</a>` : ""}
+          <button data-edit="${di}-${ii}">✏️ Edit</button>
+        </div>
+      </div>
+      <div class="item-right">
+        <div class="item-cost">${it.cost ? fmtKRW(it.cost) : "Free"}</div>
+      </div>
+    `;
+    // events
+    $(".item-check", li).addEventListener("click", (e) => {
+      e.stopPropagation();
+      const k = key(di, ii);
+      if (state.done[k]) delete state.done[k]; else state.done[k] = true;
+      save(); li.classList.toggle("done"); renderStats();
+    });
+    li.addEventListener("click", (e) => {
+      if (e.target.closest("a") || e.target.closest("button") || e.target.closest("input")) return;
+      if (hasCoords) flyTo(it.coords);
+    });
+    const focusBtn = $("[data-focus]", li);
+    if (focusBtn) focusBtn.addEventListener("click", (e) => { e.stopPropagation(); flyTo(it.coords); });
+    $("[data-edit]", li).addEventListener("click", (e) => { e.stopPropagation(); openModal(di, ii); });
+    return li;
+  }
+
+  // ---------- Day rail ----------
+  function renderRail() {
+    const rail = $("#day-rail");
+    rail.innerHTML = "";
+    state.itinerary.days.forEach((day, di) => {
+      const b = document.createElement("button");
+      b.className = di === state.activeDay ? "active" : "";
+      b.innerHTML = `<span class="rail-day">Day ${di + 1} · ${dayDate(di) || ""}</span>
+                     <span class="rail-title">${escapeHtml(day.title)}</span>`;
+      b.addEventListener("click", () => {
+        state.activeDay = di; save();
+        renderRail(); renderMap();
+        document.getElementById(`day-${di}`)?.scrollIntoView({ behavior: "smooth", block: "start" });
+      });
+      rail.appendChild(b);
+    });
+  }
+
+  // ---------- Stats ----------
+  function renderStats() {
+    const days = state.itinerary.days;
+    let total = 0, count = 0, done = 0;
+    days.forEach((day, di) => day.items.forEach((it, ii) => {
+      count++; total += Number(it.cost) || 0;
+      if (state.done[key(di, ii)]) done++;
+    }));
+    $("#stat-days").textContent = days.length;
+    $("#stat-activities").textContent = count;
+    const pct = count ? Math.round((done / count) * 100) : 0;
+    $("#stat-done").textContent = pct + "%";
+    $("#stat-budget").textContent = fmtKRW(total);
+    $("#progress-bar").style.width = pct + "%";
+    renderBudget(total);
+  }
+
+  function renderBudget(total) {
+    const byType = {};
+    state.itinerary.days.forEach(day => day.items.forEach(it => {
+      byType[it.type] = (byType[it.type] || 0) + (Number(it.cost) || 0);
+    }));
+    const root = $("#budget-breakdown");
+    root.innerHTML = "";
+    Object.keys(TYPE_META).forEach(type => {
+      const amt = byType[type] || 0;
+      if (!amt) return;
+      const meta = TYPE_META[type];
+      const pct = total ? (amt / total) * 100 : 0;
+      const row = document.createElement("div");
+      row.className = "budget-row";
+      row.innerHTML = `<span title="${meta.label}">${meta.icon}</span>
+        <div class="bar"><div style="width:${pct}%; background:${meta.color}"></div></div>
+        <span class="amt">${fmtKRW(amt)}</span>`;
+      root.appendChild(row);
+    });
+    const usd = total / (state.rate || 1370);
+    const totalRow = document.createElement("div");
+    totalRow.className = "budget-row";
+    totalRow.style.marginTop = "6px";
+    totalRow.innerHTML = `<strong style="flex:1">Total / person</strong>
+      <span class="amt"><strong>${fmtKRW(total)}</strong><br><span class="muted">≈ ${usd.toFixed(0)}</span></span>`;
+    root.appendChild(totalRow);
+  }
+
+  // ---------- Filters ----------
+  function renderFilters() {
+    const root = $("#type-filters");
+    root.innerHTML = "";
+    Object.entries(TYPE_META).forEach(([type, meta]) => {
+      const chip = document.createElement("button");
+      chip.className = "chip" + (state.activeFilters.includes(type) ? " active" : "");
+      chip.innerHTML = `${meta.icon} ${meta.label}`;
+      chip.addEventListener("click", () => {
+        const i = state.activeFilters.indexOf(type);
+        if (i >= 0) state.activeFilters.splice(i, 1); else state.activeFilters.push(type);
+        save(); renderFilters(); renderItinerary();
+      });
+      root.appendChild(chip);
+    });
+  }
+
+  // ---------- Modal (add/edit) ----------
+  function buildTypeSelect() {
+    const sel = $("#f-type");
+    sel.innerHTML = "";
+    Object.entries(TYPE_META).forEach(([t, m]) => {
+      const o = document.createElement("option");
+      o.value = t; o.textContent = `${m.icon} ${m.label}`;
+      sel.appendChild(o);
+    });
+  }
+  function openModal(di, ii) {
+    $("#f-dayIndex").value = di;
+    $("#f-itemIndex").value = ii == null ? "" : ii;
+    const editing = ii != null;
+    $("#modal-title").textContent = editing ? "Edit activity" : `Add activity · Day ${di + 1}`;
+    $("#f-delete").hidden = !editing;
+    const it = editing ? state.itinerary.days[di].items[ii] : {};
+    $("#f-time").value = it.time || "";
+    $("#f-type").value = it.type || "sight";
+    $("#f-name").value = it.name || "";
+    $("#f-cost").value = it.cost || "";
+    $("#f-url").value = it.url || "";
+    $("#f-notes").value = it.notes || "";
+    $("#f-coords").value = Array.isArray(it.coords) ? it.coords.join(", ") : "";
+    $("#modal-backdrop").hidden = false;
+    setTimeout(() => $("#f-name").focus(), 50);
+  }
+  function closeModal() { $("#modal-backdrop").hidden = true; }
+  function parseCoords(str) {
+    if (!str.trim()) return null;
+    const parts = str.split(",").map(s => parseFloat(s.trim()));
+    if (parts.length === 2 && parts.every(n => !isNaN(n))) return parts;
+    return null;
+  }
+  function saveActivity(e) {
+    e.preventDefault();
+    const di = +$("#f-dayIndex").value;
+    const iiRaw = $("#f-itemIndex").value;
+    const item = {
+      time: $("#f-time").value,
+      type: $("#f-type").value,
+      name: $("#f-name").value.trim(),
+      cost: Number($("#f-cost").value) || 0,
+      url: $("#f-url").value.trim(),
+      notes: $("#f-notes").value.trim(),
+      coords: parseCoords($("#f-coords").value)
+    };
+    if (!item.name) return;
+    const day = state.itinerary.days[di];
+    if (iiRaw === "") {
+      day.items.push(item);
+      // keep chronological order by time
+      day.items.sort((a, b) => (a.time || "").localeCompare(b.time || ""));
+      toast("Activity added");
+    } else {
+      day.items[+iiRaw] = item;
+      toast("Activity updated");
+    }
+    save(); closeModal(); refreshAll();
+  }
+  function deleteActivity() {
+    const di = +$("#f-dayIndex").value;
+    const ii = +$("#f-itemIndex").value;
+    if (isNaN(ii)) return;
+    if (!confirm("Delete this activity?")) return;
+    state.itinerary.days[di].items.splice(ii, 1);
+    // shift done flags for this day
+    const newDone = {};
+    Object.keys(state.done).forEach(k => {
+      const [d, i] = k.split("-").map(Number);
+      if (d !== di) { newDone[k] = state.done[k]; return; }
+      if (i < ii) newDone[k] = state.done[k];
+      else if (i > ii) newDone[key(d, i - 1)] = state.done[k];
+    });
+    state.done = newDone;
+    save(); closeModal(); refreshAll(); toast("Deleted");
+  }
+
+  // ---------- Packing ----------
+  function renderPacking() {
+    const ul = $("#packing-list");
+    ul.innerHTML = "";
+    state.packing.forEach((item, i) => {
+      const li = document.createElement("li");
+      if (item.done) li.classList.add("done");
+      li.innerHTML = `<input type="checkbox" ${item.done ? "checked" : ""}/>
+        <span>${escapeHtml(item.text)}</span>
+        <button class="del" title="Remove">🗑</button>`;
+      $("input", li).addEventListener("change", () => { item.done = !item.done; save(); li.classList.toggle("done"); });
+      $(".del", li).addEventListener("click", () => { state.packing.splice(i, 1); save(); renderPacking(); });
+      ul.appendChild(li);
+    });
+  }
+
+  // ---------- Static lists ----------
+  function renderPhrases() {
+    $("#phrases-list").innerHTML = PHRASES.map(p =>
+      `<li><div class="ko">${escapeHtml(p.ko)}</div>
+       <div class="rom">${escapeHtml(p.rom)}</div>
+       <div class="en">${escapeHtml(p.en)}</div></li>`).join("");
+  }
+  function renderTips() {
+    $("#tips-list").innerHTML = TIPS.map(t => `<li>${escapeHtml(t)}</li>`).join("");
+  }
+  function renderLegend() {
+    $("#map-legend").innerHTML = Object.values(TYPE_META).map(m =>
+      `<span><i class="dot" style="background:${m.color}"></i>${m.label}</span>`).join("");
+  }
+
+  // ---------- Currency ----------
+  function setupConverter() {
+    const krw = $("#conv-krw"), usd = $("#conv-usd"), rate = $("#conv-rate");
+    rate.value = state.rate;
+    krw.addEventListener("input", () => { usd.value = krw.value ? (krw.value / state.rate).toFixed(2) : ""; });
+    usd.addEventListener("input", () => { krw.value = usd.value ? Math.round(usd.value * state.rate) : ""; });
+    rate.addEventListener("input", () => {
+      state.rate = Number(rate.value) || 1370; save();
+      if (krw.value) usd.value = (krw.value / state.rate).toFixed(2);
+      renderStats();
+    });
+  }
+
+  // ---------- Import / Export ----------
+  function exportData() {
+    const blob = new Blob([JSON.stringify(state, null, 2)], { type: "application/json" });
+    const a = document.createElement("a");
+    a.href = URL.createObjectURL(blob);
+    a.download = "seoul-itinerary.json";
+    a.click();
+    URL.revokeObjectURL(a.href);
+    toast("Exported JSON");
+  }
+  function importData(file) {
+    const reader = new FileReader();
+    reader.onload = () => {
+      try {
+        const data = JSON.parse(reader.result);
+        if (!data.itinerary || !Array.isArray(data.itinerary.days)) throw new Error("bad file");
+        Object.assign(state, freshState(), data);
+        save(); applyTheme(); refreshAll(); renderPacking();
+        $("#start-date").value = state.itinerary.startDate || "";
+        toast("Imported successfully");
+      } catch { alert("Could not import: invalid file."); }
+    };
+    reader.readAsText(file);
+  }
+
+  // ---------- Theme ----------
+  function applyTheme() {
+    document.documentElement.setAttribute("data-theme", state.theme);
+    $("#theme-toggle").textContent = state.theme === "dark" ? "☀️" : "🌙";
+  }
+
+  // ---------- Util ----------
+  function escapeHtml(s) {
+    return String(s ?? "").replace(/[&<>"']/g, c =>
+      ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
+  }
+  function escapeAttr(s) { return escapeHtml(s).replace(/"/g, "&quot;"); }
+
+  function refreshAll() {
+    renderRail(); renderItinerary(); renderStats(); renderMap();
+  }
+
+  // ---------- Init ----------
+  function init() {
+    applyTheme();
+    initMap();
+    buildTypeSelect();
+    renderFilters();
+    renderPhrases();
+    renderTips();
+    renderLegend();
+    renderPacking();
+    setupConverter();
+    $("#trip-title").textContent = state.itinerary.title.split("·")[0].trim() || "Seoul";
+    $("#start-date").value = state.itinerary.startDate || "";
+    $("#search").value = state.search;
+    $("#hide-done").checked = state.hideDone;
+    refreshAll();
+
+    // events
+    $("#start-date").addEventListener("change", (e) => {
+      state.itinerary.startDate = e.target.value; save(); renderRail(); renderItinerary();
+    });
+    $("#search").addEventListener("input", (e) => { state.search = e.target.value; save(); renderItinerary(); });
+    $("#hide-done").addEventListener("change", (e) => { state.hideDone = e.target.checked; save(); renderItinerary(); });
+    $("#theme-toggle").addEventListener("click", () => {
+      state.theme = state.theme === "dark" ? "light" : "dark"; save(); applyTheme();
+    });
+
+    // drawer
+    const openDrawer = () => { $("#drawer").hidden = false; $("#drawer-backdrop").hidden = false; };
+    const closeDrawer = () => { $("#drawer").hidden = true; $("#drawer-backdrop").hidden = true; };
+    $("#menu-btn").addEventListener("click", openDrawer);
+    $("#drawer-close").addEventListener("click", closeDrawer);
+    $("#drawer-backdrop").addEventListener("click", closeDrawer);
+
+    // packing add
+    const addPacking = () => {
+      const v = $("#packing-input").value.trim();
+      if (!v) return;
+      state.packing.push({ text: v, done: false });
+      $("#packing-input").value = ""; save(); renderPacking();
+    };
+    $("#packing-add").addEventListener("click", addPacking);
+    $("#packing-input").addEventListener("keydown", (e) => { if (e.key === "Enter") addPacking(); });
+
+    // data buttons
+    $("#export-btn").addEventListener("click", exportData);
+    $("#print-btn").addEventListener("click", () => window.print());
+    $("#import-btn").addEventListener("click", () => $("#import-file").click());
+    $("#import-file").addEventListener("change", (e) => { if (e.target.files[0]) importData(e.target.files[0]); });
+    $("#reset-btn").addEventListener("click", () => {
+      if (!confirm("Reset everything to the default itinerary? Your changes will be lost.")) return;
+      localStorage.removeItem(STORAGE_KEY);
+      Object.assign(state, freshState());
+      applyTheme(); $("#start-date").value = state.itinerary.startDate;
+      $("#search").value = ""; $("#hide-done").checked = false;
+      renderFilters(); renderPacking(); refreshAll(); toast("Reset to default");
+    });
+
+    // add buttons (delegated)
+    $("#itinerary").addEventListener("click", (e) => {
+      const add = e.target.closest("[data-add]");
+      if (add) openModal(+add.dataset.add, null);
+    });
+
+    // modal
+    $("#modal-close").addEventListener("click", closeModal);
+    $("#modal-backdrop").addEventListener("click", (e) => { if (e.target.id === "modal-backdrop") closeModal(); });
+    $("#activity-form").addEventListener("submit", saveActivity);
+    $("#f-delete").addEventListener("click", deleteActivity);
+
+    // keyboard
+    document.addEventListener("keydown", (e) => {
+      if (e.key === "Escape") { closeModal(); closeDrawer(); }
+    });
+
+    // sync active day on scroll
+    let scrollT;
+    $("#itinerary").addEventListener("scroll", () => {
+      clearTimeout(scrollT);
+      scrollT = setTimeout(() => {
+        const cards = $(".day-card");
+        const top = $("#itinerary").getBoundingClientRect().top + 80;
+        for (let i = cards.length - 1; i >= 0; i--) {
+          if (cards[i].getBoundingClientRect().top <= top) {
+            const di = +cards[i].id.split("-")[1];
+            if (di !== state.activeDay) { state.activeDay = di; renderRail(); renderMap(); }
+            break;
+          }
+        }
+      }, 120);
+    });
+  }
+
+  if (document.readyState === "loading") document.addEventListener("DOMContentLoaded", init);
+  else init();
+})();
+
+</script>
+</body>
+</html>
