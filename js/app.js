@@ -854,7 +854,11 @@
       setSyncStatus("synced", `Synced · trip “${code}” · updated just now`);
     }, (err) => {
       console.warn("Sync read error:", err);
-      setSyncStatus("error", "Can't reach the database — running locally.");
+      const code = (err && (err.code || err.message) || "").toString();
+      const hint = /permission|denied/i.test(code)
+        ? "Permission denied — update your Realtime Database rules (see README)."
+        : "Can't reach the database" + (code ? ` (${code})` : "") + " — running locally.";
+      setSyncStatus("error", hint);
     });
     sync.enabled = true;
   }
@@ -864,7 +868,7 @@
     sync.pushT = setTimeout(() => {
       sync.ref.set(sharedSnapshot())
         .then(() => setSyncStatus("synced", `Synced · trip “${sync.tripCode}”`))
-        .catch(() => setSyncStatus("error", "Couldn't save to the cloud — kept locally."));
+        .catch((err) => setSyncStatus("error", "Couldn't save to the cloud (" + ((err && (err.code || err.message)) || "denied") + ") — kept locally."));
     }, 500);
   }
 
