@@ -399,6 +399,7 @@
     $("#f-url").value = it.url || "";
     $("#f-notes").value = it.notes || "";
     $("#f-coords").value = Array.isArray(it.coords) ? it.coords.join(", ") : "";
+    $("#f-adv").open = !!(it.url || (Array.isArray(it.coords) && it.coords.length === 2));
     renderQuickfill(editing);  // saved-place shortcuts (only useful when adding)
     $("#modal-backdrop").hidden = false;
     setTimeout(() => $("#f-name").focus(), 50);
@@ -410,7 +411,47 @@
     if (parts.length === 2 && parts.every(n => !isNaN(n))) return parts;
     return null;
   }
-  function sortByTime(day) { day.items.sort((a, b) => (a.time || "99:99").localeCompare(b.time || "99:99")); }
+  // Convert a human time label into sortable minutes. Handles "9:00 AM", "13:00",
+  // "~5:00 PM", descriptive words ("Morning", "Post-game"), and "Jun 19 · AM" date prefixes.
+  function timeValue(str) {
+    if (!str) return 1e9;
+    let s = String(str).toLowerCase().trim();
+    let base = 0;
+    const jun = s.match(/\b(?:jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec)[a-z]*\s*(\d{1,2})/);
+    if (jun) { base = parseInt(jun[1], 10) * 1440; s = s.replace(jun[0], "").trim(); }
+    s = s.replace(/^[~≈]\s*/, "").replace(/^(around|about|approx\.?)\s+/, "").replace(/^[·•\-\s]+/, "");
+    const clock = s.match(/(\d{1,2}):(\d{2})\s*(a\.?m\.?|p\.?m\.?)?/);
+    if (clock) {
+      let h = parseInt(clock[1], 10); const min = parseInt(clock[2], 10);
+      const ap = clock[3] ? clock[3].replace(/\./g, "") : "";
+      if (ap === "pm" && h < 12) h += 12;
+      if (ap === "am" && h === 12) h = 0;
+      return base + h * 60 + min;
+    }
+    const hour = s.match(/\b(\d{1,2})\s*(am|pm)\b/);
+    if (hour) {
+      let h = parseInt(hour[1], 10);
+      if (hour[2] === "pm" && h < 12) h += 12;
+      if (hour[2] === "am" && h === 12) h = 0;
+      return base + h * 60;
+    }
+    const kw = [
+      [/dawn|sunrise/, 360], [/early\s*morning/, 420], [/morning/, 540],
+      [/midday|noon|lunch/, 720], [/early\s*afternoon/, 780], [/late\s*afternoon/, 960],
+      [/afternoon/, 840], [/sunset|dusk/, 1140], [/evening|\beve\b/, 1170],
+      [/night|nightlife/, 1260], [/post[-\s]?game|post/, 1320], [/late/, 1380],
+      [/\bam\b/, 540], [/\bpm\b/, 840]
+    ];
+    for (const [re, val] of kw) if (re.test(s)) return base + val;
+    return base + 1e6; // unknown times sort after known ones (within the same day/date)
+  }
+  function sortByTime(day) {
+    day.items = day.items
+      .map((it, i) => ({ it, i }))
+      .sort((a, b) => (timeValue(a.it.time) - timeValue(b.it.time)) || (a.i - b.i))
+      .map(o => o.it);
+  }
+  function normalizeOrder() { state.itinerary.days.forEach(sortByTime); }
 
   function saveActivity(e) {
     e.preventDefault();
@@ -740,7 +781,7 @@
         const data = JSON.parse(reader.result);
         if (!data.itinerary || !Array.isArray(data.itinerary.days)) throw new Error("bad file");
         Object.assign(state, freshState(), data);
-        ensureIds(); migrateDone();
+        ensureIds(); migrateDone(); normalizeOrder();
         save(); applyTheme(); renderFilters(); refreshAll(); renderPacking(); renderPlaces();
         $("#start-date").value = state.itinerary.startDate || "";
         $("#search").value = state.search || ""; $("#hide-done").checked = !!state.hideDone;
@@ -786,7 +827,7 @@
   }
   function applyShared(data) {
     SHARED_KEYS.forEach(k => { if (data[k] !== undefined) state[k] = data[k]; });
-    ensureIds();
+    ensureIds(); normalizeOrder();
   }
   function setSyncStatus(status, msg) {
     const dot = $("#sync-dot"), txt = $("#sync-status");
@@ -874,7 +915,7 @@
 
   // ---------- Init ----------
   function init() {
-    ensureIds(); migrateDone(); save();
+    ensureIds(); migrateDone(); normalizeOrder(); save();
     applyTheme();
     initMap();
     buildTypeSelect();

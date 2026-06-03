@@ -8,7 +8,7 @@
   <!-- Leaflet (free, OpenStreetMap — no API key needed) -->
   <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"
         integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY=" crossorigin="" />
-  <link rel="stylesheet" href="css/styles.css?v=10" />
+  <link rel="stylesheet" href="css/styles.css?v=11" />
   <link rel="preconnect" href="https://tile.openstreetmap.org" />
 </head>
 <body>
@@ -183,9 +183,10 @@
         <input type="hidden" id="f-itemIndex" />
         <div class="quickfill" id="quickfill-row" hidden></div>
         <div class="form-grid">
-          <label class="full">Day
-            <select id="f-day"></select>
-          </label>
+          <label class="full">Name <input type="text" id="f-name" required placeholder="e.g. Lunch at Gwangjang Market" /></label>
+          <label class="full">Day <select id="f-day"></select></label>
+          <label>Time <input type="text" id="f-time" placeholder="e.g. 12:00 PM or Morning" /></label>
+          <label>Type <select id="f-type"></select></label>
         </div>
         <fieldset class="form-grid newday-fields" id="f-newday-fields" hidden>
           <legend>New day details</legend>
@@ -195,20 +196,18 @@
           <label class="full">Theme <input type="text" id="f-newtheme" placeholder="optional short description" /></label>
         </fieldset>
         <div class="form-grid">
-          <label>Time <input type="time" id="f-time" /></label>
-          <label>Type
-            <select id="f-type"></select>
-          </label>
-          <label class="full">Name <input type="text" id="f-name" required placeholder="e.g. Lunch at…" /></label>
           <label>Cost (₩) <input type="number" id="f-cost" min="0" placeholder="0" /></label>
-          <label>Link (URL) <input type="url" id="f-url" placeholder="https://…" /></label>
           <label class="full">Notes <textarea id="f-notes" rows="2" placeholder="Details, reservations, tips…"></textarea></label>
-          <label class="full">Coordinates (lat, lng — optional)
-            <input type="text" id="f-coords" placeholder="37.5665, 126.9780" />
-          </label>
         </div>
+        <details class="adv" id="f-adv">
+          <summary>More options — link & map location</summary>
+          <div class="form-grid">
+            <label class="full">Link (URL) <input type="url" id="f-url" placeholder="https://…" /></label>
+            <label class="full">Map location (lat, lng) <input type="text" id="f-coords" placeholder="37.5665, 126.9780" /></label>
+          </div>
+        </details>
         <div class="btn-row end">
-          <button type="button" class="btn" id="f-delete" hidden>Delete</button>
+          <button type="button" class="btn danger" id="f-delete" hidden>Delete</button>
           <button type="submit" class="btn primary">Save</button>
         </div>
       </form>
@@ -279,8 +278,8 @@
   <!-- Firebase (optional live sync). Loads from CDN; app stays local-only if unavailable. -->
   <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-app-compat.js"></script>
   <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-database-compat.js"></script>
-  <script src="js/firebase-config.js?v=10"></script>
-  <script src="js/data.js?v=10"></script>
-  <script src="js/app.js?v=10"></script>
+  <script src="js/firebase-config.js?v=11"></script>
+  <script src="js/data.js?v=11"></script>
+  <script src="js/app.js?v=11"></script>
 </body>
 </html>
