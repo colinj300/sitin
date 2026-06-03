@@ -26,7 +26,7 @@
   function defaultPlaces() {
     // Reusable spots. ids are assigned by ensureIds(). Edit "Home" with your own address.
     return [
-      { emoji: "🏠", name: "Home / Airbnb", type: "rest", address: "", coords: null, cost: 0, time: "", url: "", notes: "Back to the Airbnb to rest." }
+      { emoji: "🏠", name: "Itaewon Airbnb", type: "rest", address: "Itaewon, Yongsan-gu, Seoul", coords: [37.5345, 126.9945], cost: 0, time: "", url: "", notes: "Back to the Airbnb to rest." }
     ];
   }
   function defaultPacking() {
@@ -42,7 +42,15 @@
       const raw = localStorage.getItem(STORAGE_KEY);
       if (!raw) return freshState();
       const parsed = JSON.parse(raw);
-      return Object.assign(freshState(), parsed);
+      const s = Object.assign(freshState(), parsed);
+      // If the bundled trip has a newer version, replace the itinerary (but keep
+      // personal stuff: packing list, saved places, theme, rate, filters).
+      if (!parsed.itinerary || parsed.itinerary.version !== DEFAULT_ITINERARY.version) {
+        s.itinerary = structuredClone(DEFAULT_ITINERARY);
+        s.done = {};
+        s.activeDay = 0;
+      }
+      return s;
     } catch { return freshState(); }
   }
   function save() {
@@ -187,6 +195,12 @@
       `;
       const ul = $(".items", card);
       visibleItems.forEach(({ it, ii }) => ul.appendChild(renderItem(day, di, it, ii)));
+      if (day.note) {
+        const noteEl = document.createElement("div");
+        noteEl.className = "day-note";
+        noteEl.innerHTML = `💡 ${escapeHtml(day.note)}`;
+        card.insertBefore(noteEl, $(".add-item-btn", card));
+      }
       root.appendChild(card);
     });
     if (!root.children.length) {

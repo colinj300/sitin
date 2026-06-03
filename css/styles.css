@@ -189,6 +189,11 @@ input:focus, select:focus, textarea:focus { outline: 2px solid var(--accent); ou
 .item-links a:hover, .item-links button:hover { text-decoration: underline; }
 .item-right { text-align: right; }
 .item-cost { font-size: 13px; font-weight: 600; white-space: nowrap; }
+.day-note {
+  margin: 4px 18px 12px; padding: 10px 13px; font-size: 12.5px; line-height: 1.55;
+  color: var(--text); background: var(--surface-2);
+  border-left: 3px solid var(--accent); border-radius: 8px;
+}
 .add-item-btn {
   width: calc(100% - 36px); margin: 6px 18px 14px; padding: 9px;
   border: 1.5px dashed var(--border); border-radius: 10px; background: none;
