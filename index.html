@@ -88,6 +88,17 @@
     </div>
 
     <div class="drawer-section">
+      <h3>🚇 Getting around · Seoul Metro</h3>
+      <p class="muted small" id="metro-fare"></p>
+      <div class="metro-now small muted">Estimated next trains for <strong id="metro-clock">now</strong> · typical schedule, not live</div>
+      <div id="metro-lines" class="metro-lines"></div>
+      <details class="metro-details">
+        <summary>Fares, transfers & tips</summary>
+        <ul class="tips small" id="metro-notes"></ul>
+      </details>
+    </div>
+
+    <div class="drawer-section">
       <h3>💱 Currency converter</h3>
       <p class="muted small">Offline estimate — set your own rate. Default: 1 USD ≈ 1370 KRW.</p>
       <div class="conv-row">
@@ -193,6 +204,7 @@
           <label>Area <input type="text" id="d-area" placeholder="e.g. Mapo-gu" /></label>
           <label class="full">Day title <input type="text" id="d-title" required placeholder="e.g. Hongdae & Youth Culture" /></label>
           <label class="full">Theme <input type="text" id="d-theme" placeholder="optional short description" /></label>
+          <label class="full">🚇 Getting there (transport) <input type="text" id="d-transport" placeholder="e.g. Line 2 to Hongik Univ (Exit 9)" /></label>
         </div>
         <div class="btn-row end">
           <button type="button" class="btn danger" id="d-delete" hidden>Delete day</button>

@@ -134,7 +134,7 @@ input:focus, select:focus, textarea:focus { outline: 2px solid var(--accent); ou
 .day-rail button.active .rail-title { color: var(--accent); }
 
 .itinerary { overflow-y: auto; height: 100%; padding: 18px 22px 60px; }
-.map-pane { height: 100%; position: relative; border-left: 1px solid var(--border); }
+.map-pane { height: 100%; position: relative; border-left: 1px solid var(--border); isolation: isolate; z-index: 0; }
 #map { height: 100%; width: 100%; background: var(--surface-2); }
 .map-legend {
   position: absolute; bottom: 14px; left: 14px; z-index: 500;
@@ -164,6 +164,10 @@ input:focus, select:focus, textarea:focus { outline: 2px solid var(--accent); ou
 .day-badge small { font-weight: 500; opacity: .85; font-size: 9px; }
 .day-headinfo h2 { font-size: 17px; }
 .day-headinfo .theme { font-size: 13px; color: var(--muted); }
+.day-headinfo .day-transport {
+  font-size: 12px; color: var(--text); margin-top: 5px; background: var(--surface-2);
+  border: 1px solid var(--border); border-radius: 8px; padding: 4px 8px; display: inline-block; max-width: 100%;
+}
 .day-headinfo .area { font-size: 11px; color: var(--accent); font-weight: 600; }
 .day-meta { text-align: right; font-size: 12px; color: var(--muted); white-space: nowrap; }
 .day-meta .day-cost { font-weight: 700; color: var(--text); font-size: 14px; }
@@ -216,13 +220,13 @@ input:focus, select:focus, textarea:focus { outline: 2px solid var(--accent); ou
 .btn-row { display: flex; gap: 8px; flex-wrap: wrap; }
 .btn-row.end { justify-content: flex-end; margin-top: 16px; }
 
-/* Drawer */
+/* Drawer — z-index must beat Leaflet's internal panes/controls (up to ~1000) */
 .drawer-backdrop, .modal-backdrop {
-  position: fixed; inset: 0; background: rgba(10,15,30,.5); z-index: 100;
+  position: fixed; inset: 0; background: rgba(10,15,30,.5); z-index: 2000;
 }
 .drawer {
   position: fixed; top: 0; right: 0; height: 100%; width: 380px; max-width: 92vw;
-  background: var(--surface); z-index: 101; box-shadow: -8px 0 30px rgba(0,0,0,.2);
+  background: var(--surface); z-index: 2001; box-shadow: -8px 0 30px rgba(0,0,0,.2);
   overflow-y: auto; padding-bottom: 40px;
 }
 .drawer-head {
@@ -260,11 +264,33 @@ input:focus, select:focus, textarea:focus { outline: 2px solid var(--accent); ou
 .tips { margin: 0; padding-left: 18px; font-size: 13px; color: var(--muted); }
 .tips li { margin-bottom: 7px; }
 
+/* Metro */
+.metro-now { margin: 4px 0 10px; }
+.metro-lines { display: flex; flex-direction: column; gap: 7px; }
+.metro-line {
+  display: flex; align-items: center; gap: 10px; padding: 8px 10px;
+  border: 1px solid var(--border); border-radius: 10px; background: var(--surface);
+}
+.metro-badge {
+  min-width: 30px; height: 30px; border-radius: 8px; color: #fff; font-weight: 700;
+  font-size: 12px; display: grid; place-items: center; padding: 0 6px; white-space: nowrap; flex-shrink: 0;
+}
+.metro-info { flex: 1; min-width: 0; }
+.metro-info .mn { font-size: 13px; font-weight: 600; }
+.metro-info .ms { font-size: 11px; color: var(--muted); overflow: hidden; text-overflow: ellipsis; }
+.metro-next { text-align: right; white-space: nowrap; }
+.metro-next .nt { font-size: 13px; font-weight: 700; }
+.metro-next .nt.closed { color: var(--danger); font-weight: 600; font-size: 11px; }
+.metro-next .freq { font-size: 10px; color: var(--muted); }
+.metro-details { margin-top: 12px; }
+.metro-details summary { cursor: pointer; font-size: 13px; color: var(--accent); }
+.metro-details .tips { margin-top: 8px; }
+
 /* Modal */
 .modal {
   position: fixed; top: 50%; left: 50%; transform: translate(-50%,-50%);
   width: 520px; max-width: 94vw; max-height: 90vh; overflow-y: auto;
-  background: var(--surface); border-radius: var(--radius); z-index: 101; box-shadow: var(--shadow);
+  background: var(--surface); border-radius: var(--radius); z-index: 2001; box-shadow: var(--shadow);
 }
 #activity-form { padding: 18px; }
 .form-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
@@ -291,7 +317,7 @@ input:focus, select:focus, textarea:focus { outline: 2px solid var(--accent); ou
 .toast {
   position: fixed; bottom: 24px; left: 50%; transform: translateX(-50%);
   background: var(--text); color: var(--bg); padding: 11px 18px; border-radius: 10px;
-  font-size: 13px; z-index: 200; box-shadow: var(--shadow); animation: pop .25s;
+  font-size: 13px; z-index: 3000; box-shadow: var(--shadow); animation: pop .25s;
 }
 @keyframes pop { from { opacity: 0; transform: translate(-50%, 10px); } }
 
@@ -415,6 +441,17 @@ input:focus, select:focus, textarea:focus { outline: 2px solid var(--accent); ou
     </div>
 
     <div class="drawer-section">
+      <h3>🚇 Getting around · Seoul Metro</h3>
+      <p class="muted small" id="metro-fare"></p>
+      <div class="metro-now small muted">Estimated next trains for <strong id="metro-clock">now</strong> · typical schedule, not live</div>
+      <div id="metro-lines" class="metro-lines"></div>
+      <details class="metro-details">
+        <summary>Fares, transfers & tips</summary>
+        <ul class="tips small" id="metro-notes"></ul>
+      </details>
+    </div>
+
+    <div class="drawer-section">
       <h3>💱 Currency converter</h3>
       <p class="muted small">Offline estimate — set your own rate. Default: 1 USD ≈ 1370 KRW.</p>
       <div class="conv-row">
@@ -520,6 +557,7 @@ input:focus, select:focus, textarea:focus { outline: 2px solid var(--accent); ou
           <label>Area <input type="text" id="d-area" placeholder="e.g. Mapo-gu" /></label>
           <label class="full">Day title <input type="text" id="d-title" required placeholder="e.g. Hongdae & Youth Culture" /></label>
           <label class="full">Theme <input type="text" id="d-theme" placeholder="optional short description" /></label>
+          <label class="full">🚇 Getting there (transport) <input type="text" id="d-transport" placeholder="e.g. Line 2 to Hongik Univ (Exit 9)" /></label>
         </div>
         <div class="btn-row end">
           <button type="button" class="btn danger" id="d-delete" hidden>Delete day</button>
@@ -546,6 +584,7 @@ const DEFAULT_ITINERARY = {
       title: "Arrival & Myeongdong",
       theme: "Settle in, first taste of the city",
       area: "Jung-gu",
+      transport: "AREX from Incheon to Seoul Station, then Line 4 to Myeongdong (Exit 6–7).",
       items: [
         { time: "14:00", type: "transport", name: "Arrive Incheon (ICN) → AREX train", cost: 4750, coords: [37.4602, 126.4407], notes: "AREX All-Stop to Seoul Station (~60 min). T-money card recommended.", url: "https://www.arex.or.kr/main.do" },
         { time: "16:00", type: "rest", name: "Check in to hotel", cost: 0, coords: [37.5636, 126.9826], notes: "Drop bags, freshen up. Myeongdong is central & convenient." },
@@ -558,6 +597,7 @@ const DEFAULT_ITINERARY = {
       title: "Palaces & Old Seoul",
       theme: "Joseon-era grandeur",
       area: "Jongno-gu",
+      transport: "Line 3 to Gyeongbokgung (Exit 5), or Anguk (Exit 2) for Bukchon & Insadong.",
       items: [
         { time: "09:00", type: "sight", name: "Gyeongbokgung Palace", cost: 3000, coords: [37.5796, 126.9770], notes: "Wear a hanbok (rental ~₩15k) to enter free! Catch the Changing of the Guard at 10:00.", url: "https://www.royalpalace.go.kr/" },
         { time: "11:00", type: "sight", name: "National Folk Museum of Korea", cost: 0, coords: [37.5817, 126.9799], notes: "Inside palace grounds. Free entry." },
@@ -571,6 +611,7 @@ const DEFAULT_ITINERARY = {
       title: "Namsan & Itaewon",
       theme: "City views and global flavors",
       area: "Yongsan-gu",
+      transport: "Line 4 to Myeongdong for the Namsan cable car; Line 6 to Itaewon (Exit 1–3).",
       items: [
         { time: "10:00", type: "activity", name: "Namsan Cable Car", cost: 14000, coords: [37.5512, 126.9882], notes: "Round trip. Or hike up (~30 min) for free." },
         { time: "10:45", type: "sight", name: "N Seoul Tower", cost: 16000, coords: [37.5512, 126.9882], notes: "Observation deck + love locks. Great panoramic views.", url: "https://www.nseoultower.co.kr/" },
@@ -583,6 +624,7 @@ const DEFAULT_ITINERARY = {
       title: "Hongdae Youth Culture",
       theme: "Indie, street art, nightlife",
       area: "Mapo-gu",
+      transport: "Line 2, AREX, or Gyeongui–Jungang to Hongik Univ (Exit 9). Yeonnam-dong is north.",
       items: [
         { time: "11:00", type: "activity", name: "Hongdae Free Market & street performances", cost: 0, coords: [37.5563, 126.9236], notes: "Buskers, art market (weekends), youthful energy." },
         { time: "12:30", type: "food", name: "Korean BBQ lunch", cost: 25000, coords: [37.5558, 126.9230], notes: "Samgyeopsal (pork belly) — grill it yourself." },
@@ -595,6 +637,7 @@ const DEFAULT_ITINERARY = {
       title: "Gangnam & COEX",
       theme: "Modern, upscale Seoul",
       area: "Gangnam-gu",
+      transport: "Line 2 to Samseong for COEX (Exit 5–6); Line 9 to Bongeunsa; Line 3 to Apgujeong.",
       items: [
         { time: "10:00", type: "sight", name: "Bongeunsa Temple", cost: 0, coords: [37.5150, 127.0573], notes: "Serene Buddhist temple amid skyscrapers. Temple-stay programs available." },
         { time: "11:30", type: "sight", name: "Starfield Library (COEX Mall)", cost: 0, coords: [37.5126, 127.0590], notes: "Iconic giant open library. Free, very photogenic." },
@@ -607,6 +650,7 @@ const DEFAULT_ITINERARY = {
       title: "DMZ Day Trip",
       theme: "The world's most fortified border",
       area: "Paju / Gyeonggi-do",
+      transport: "Guided tour bus only — the DMZ cannot be visited independently. Tours pick up centrally.",
       items: [
         { time: "07:30", type: "transport", name: "Join DMZ tour (pickup)", cost: 60000, coords: [37.5636, 126.9826], notes: "Book a guided tour in advance (passport required). Imjingak departure." },
         { time: "09:30", type: "sight", name: "Imjingak Park & Freedom Bridge", cost: 0, coords: [37.8895, 126.7400], notes: "Memorials, rusted train, ribbons of hope." },
@@ -620,6 +664,7 @@ const DEFAULT_ITINERARY = {
       title: "Dongdaemun & Markets",
       theme: "Shopping, design, night markets",
       area: "Jung-gu",
+      transport: "Line 2/4/5 to Dongdaemun History & Culture Park (DDP, Exit 1).",
       items: [
         { time: "11:00", type: "sight", name: "Dongdaemun Design Plaza (DDP)", cost: 0, coords: [37.5669, 127.0095], notes: "Zaha Hadid landmark. Exhibitions, LED rose garden at night.", url: "https://www.ddp.or.kr/" },
         { time: "13:00", type: "food", name: "Majang-dong / local lunch", cost: 14000, coords: [37.5700, 127.0240], notes: "Or grab makgeolli + jeon nearby." },
@@ -632,6 +677,7 @@ const DEFAULT_ITINERARY = {
       title: "Nami Island Day Trip",
       theme: "Tree-lined romance & nature",
       area: "Chuncheon / Gangwon",
+      transport: "Gyeongchun Line or ITX-Cheongchun to Gapyeong (~1 hr), then shuttle bus to Nami ferry.",
       items: [
         { time: "08:00", type: "transport", name: "ITX-Cheong to Gapyeong", cost: 9000, coords: [37.5547, 126.9707], notes: "From Yongsan/Cheongnyangni (~1hr). Or Gyeongchun subway line." },
         { time: "10:00", type: "sight", name: "Nami Island (ferry + entry)", cost: 16000, coords: [37.7906, 127.5256], notes: "Famous metasequoia lanes (Winter Sonata). Bike rentals available." },
@@ -644,6 +690,7 @@ const DEFAULT_ITINERARY = {
       title: "Murals, Hilltops & Hanok",
       theme: "Hidden creative corners",
       area: "Jongno-gu",
+      transport: "Line 4 to Hyehwa (Exit 2) for Ihwa & Naksan; Line 3 to Anguk for Changdeokgung.",
       items: [
         { time: "10:00", type: "sight", name: "Ihwa Mural Village", cost: 0, coords: [37.5790, 127.0060], notes: "Hillside art village. Quiet streets, painted stairs." },
         { time: "11:30", type: "activity", name: "Naksan Park & Seoul City Wall", cost: 0, coords: [37.5805, 127.0073], notes: "Walk a stretch of the fortress wall with great views." },
@@ -656,6 +703,7 @@ const DEFAULT_ITINERARY = {
       title: "Seongsu & Seoul Forest",
       theme: "Brooklyn of Seoul — cafes & design",
       area: "Seongdong-gu",
+      transport: "Suin–Bundang Line to Seoul Forest, or Line 2 to Seongsu (Exit 3) for the cafe district.",
       items: [
         { time: "10:30", type: "sight", name: "Seoul Forest Park", cost: 0, coords: [37.5444, 127.0374], notes: "Deer park, wetlands, art. Free and spacious." },
         { time: "12:00", type: "food", name: "Seongsu-dong brunch", cost: 17000, coords: [37.5444, 127.0557], notes: "Converted warehouse cafes, specialty coffee." },
@@ -668,6 +716,7 @@ const DEFAULT_ITINERARY = {
       title: "Lotte World & Jamsil",
       theme: "Theme park fun",
       area: "Songpa-gu",
+      transport: "Line 2 or 8 to Jamsil (Exit 4) — directly connected to Lotte World underground.",
       items: [
         { time: "10:00", type: "activity", name: "Lotte World (Adventure + Magic Island)", cost: 62000, coords: [37.5111, 127.0980], notes: "Largest indoor theme park. Buy day pass online for slight discount.", url: "https://adventure.lotteworld.com/" },
         { time: "13:00", type: "food", name: "Lunch inside park / food street", cost: 14000, coords: [37.5111, 127.0980], notes: "Plenty of options on site." },
@@ -679,6 +728,7 @@ const DEFAULT_ITINERARY = {
       title: "Suwon Hwaseong Day Trip",
       theme: "Fortress walls & history",
       area: "Suwon / Gyeonggi-do",
+      transport: "Line 1 to Suwon Station (~1 hr), then bus 11/13/36 or taxi to Hwaseong Fortress.",
       items: [
         { time: "09:00", type: "transport", name: "Subway/Train to Suwon", cost: 2000, coords: [37.5547, 126.9707], notes: "Line 1 to Suwon Station (~1hr)." },
         { time: "10:30", type: "sight", name: "Hwaseong Fortress walk", cost: 1000, coords: [37.2880, 127.0150], notes: "UNESCO 18th-century fortress. Walk the full ~5.7km wall loop." },
@@ -692,6 +742,7 @@ const DEFAULT_ITINERARY = {
       title: "Museums & Hangang",
       theme: "Culture and the river",
       area: "Yongsan-gu",
+      transport: "Line 4 or Gyeongui–Jungang to Ichon (Exit 2) for the National Museum; Line 5 to Yeouinaru for the river.",
       items: [
         { time: "10:00", type: "sight", name: "National Museum of Korea", cost: 0, coords: [37.5240, 126.9803], notes: "Free, world-class. Don't miss the Pensive Bodhisattva.", url: "https://www.museum.go.kr/" },
         { time: "13:00", type: "food", name: "Lunch near Ichon", cost: 13000, coords: [37.5220, 126.9760], notes: "" },
@@ -704,6 +755,7 @@ const DEFAULT_ITINERARY = {
       title: "Last Bites & Departure",
       theme: "Souvenirs and farewell",
       area: "Jung-gu",
+      transport: "Line 4 to Seoul Station, then AREX to Incheon Airport. Allow 3+ hrs before your flight.",
       items: [
         { time: "09:00", type: "shopping", name: "Last-minute souvenirs", cost: 30000, coords: [37.5609, 126.9858], notes: "Snacks, K-beauty, gifts. Namdaemun Market is great & cheap." },
         { time: "10:30", type: "food", name: "Final Korean breakfast/brunch", cost: 12000, coords: [37.5594, 126.9776], notes: "Maybe gukbap or a last bowl of bibimbap." },
@@ -747,6 +799,41 @@ const TIPS = [
   "Tax-free shopping: spend ₩15,000+ at participating stores and claim a refund at the airport.",
   "Cafés are everywhere and double as workspaces/rest stops — use them to recharge."
 ];
+
+/* ---------- Transport ---------- */
+// Seoul Metro lines. Times are typical published schedules (offline estimates, not live).
+// headPeak / headOff = minutes between trains (peak vs off-peak). Hours in 24h "HH:MM".
+const METRO_LINES = [
+  { id: "1", name: "Line 1",  color: "#0052A4", headPeak: 4, headOff: 7,  first: "05:15", last: "00:00", note: "Soyosan ↔ Incheon/Sinchang. Oldest, longest line." },
+  { id: "2", name: "Line 2",  color: "#00A84D", headPeak: 2.5, headOff: 5, first: "05:30", last: "00:30", note: "Green loop line — Hongik Univ, Gangnam, Jamsil, City Hall." },
+  { id: "3", name: "Line 3",  color: "#EF7C1C", headPeak: 3.5, headOff: 6, first: "05:20", last: "00:10", note: "Gyeongbokgung, Anguk (Bukchon), Apgujeong, Express Bus Terminal." },
+  { id: "4", name: "Line 4",  color: "#00A4E3", headPeak: 3.5, headOff: 6, first: "05:25", last: "00:05", note: "Myeongdong, Dongdaemun, Seoul Station, Hyehwa." },
+  { id: "5", name: "Line 5",  color: "#996CAC", headPeak: 4, headOff: 7,  first: "05:30", last: "00:00", note: "Gimpo Airport, Yeouido, Gwanghwamun, Dongdaemun History & Culture Park." },
+  { id: "6", name: "Line 6",  color: "#CD7C2F", headPeak: 4.5, headOff: 8, first: "05:30", last: "00:00", note: "Itaewon, Hangangjin, World Cup Stadium, Sangsu (Hongdae)." },
+  { id: "7", name: "Line 7",  color: "#747F00", headPeak: 4, headOff: 7,  first: "05:30", last: "00:00", note: "Gangnam (Express Bus Terminal), Konkuk Univ, Ttukseom Resort." },
+  { id: "8", name: "Line 8",  color: "#E6186C", headPeak: 5, headOff: 9,  first: "05:30", last: "23:50", note: "Jamsil, Lotte World, Seokchon, Moran." },
+  { id: "9", name: "Line 9",  color: "#BDB092", headPeak: 4, headOff: 7,  first: "05:30", last: "00:00", note: "Gimpo Airport ↔ Gangnam. Express trains skip stops (faster)." },
+  { id: "A", name: "AREX (Airport)", color: "#0090D2", headPeak: 6, headOff: 12, first: "05:20", last: "00:00", note: "Incheon Airport ↔ Seoul Station. All-stop ₩4,750; Express ~43 min." },
+  { id: "SB", name: "Sinbundang", color: "#D4003B", headPeak: 5, headOff: 8, first: "05:30", last: "00:00", note: "Gangnam ↔ Gwanggyo. Fast, but small surcharge on top of base fare." },
+  { id: "GB", name: "Suin–Bundang", color: "#FABE00", headPeak: 6, headOff: 10, first: "05:30", last: "00:00", note: "Wangsimni, Seoul Forest, Apgujeong Rodeo, Gangnam-gu Office." }
+];
+
+const TRANSPORT_INFO = {
+  fareBase: 1400,           // KRW, base fare with T-money (first 10 km)
+  fareStep: "+₩100 per 5 km beyond 10 km (≈ +₩100 per ~5 km up to 50 km).",
+  cashSurcharge: 100,       // single-journey paper ticket costs ₩100 more + ₩500 refundable deposit
+  transferFree: true,
+  peakWindows: [["07:00", "09:00"], ["18:00", "20:00"]],
+  notes: [
+    "Tap a T-money card on entry AND exit — fares are distance-based.",
+    "Transfers between subway lines and to buses are free within 30 min (4 transfers).",
+    "Buy/refill T-money at any convenience store or station machine. ₩500 buys the card.",
+    "Use Naver Map or KakaoMap for live routing — Google Maps transit is limited in Korea.",
+    "Trains are frequent: every 2–5 min at peak, 6–10 min late evening. Avoid 08:00–09:00 rush.",
+    "Last trains leave terminals around midnight — check the last-train time for your line."
+  ]
+};
+
 
 </script>
   <script>
@@ -917,6 +1004,7 @@ const TIPS = [
               <h2>${escapeHtml(day.title)}</h2>
               <div class="theme">${escapeHtml(day.theme || "")}</div>
               <div class="area">📍 ${escapeHtml(day.area || "Seoul")}</div>
+              ${day.transport ? `<div class="day-transport">🚇 ${escapeHtml(day.transport)}</div>` : ""}
             </div>
           </div>
           <div class="day-meta">
@@ -1210,6 +1298,7 @@ const TIPS = [
     $("#d-title").value = day.title || "";
     $("#d-theme").value = day.theme || "";
     $("#d-area").value = day.area || "";
+    $("#d-transport").value = day.transport || "";
     $("#day-modal-backdrop").hidden = false;
     setTimeout(() => $("#d-title").focus(), 50);
   }
@@ -1223,6 +1312,7 @@ const TIPS = [
       title,
       theme: $("#d-theme").value.trim(),
       area: $("#d-area").value.trim() || "Seoul",
+      transport: $("#d-transport").value.trim() || undefined,
       date: $("#d-date").value || undefined
     };
     if (idxRaw === "") {
@@ -1274,6 +1364,48 @@ const TIPS = [
   function renderLegend() {
     $("#map-legend").innerHTML = Object.values(TYPE_META).map(m =>
       `<span><i class="dot" style="background:${m.color}"></i>${m.label}</span>`).join("");
+  }
+
+  // ---------- Metro / transport (offline next-train estimates) ----------
+  const tmin = s => { const [h, m] = s.split(":").map(Number); return h * 60 + m; };
+  const isPeakNow = nowM => TRANSPORT_INFO.peakWindows.some(([a, b]) => nowM >= tmin(a) && nowM < tmin(b));
+  function nextTrain(line, nowM) {
+    const peak = isPeakNow(nowM);
+    const head = peak ? line.headPeak : line.headOff;
+    let firstM = tmin(line.first), lastM = tmin(line.last);
+    if (lastM <= firstM) lastM += 1440;             // service crosses midnight
+    let nm = nowM; if (nm < firstM) nm += 1440;     // we might be in the post-midnight tail
+    if (nm < firstM || nm > lastM) return { closed: true, head };
+    const offset = nm - firstM;
+    let wait = head - (offset % head);
+    if (wait === head) wait = 0;                    // exactly on a departure
+    if (nm + wait > lastM) return { closed: true, head };
+    return { closed: false, wait: Math.round(wait), head, peak };
+  }
+  function renderMetro() {
+    const fareEl = $("#metro-fare");
+    if (!fareEl) return;
+    fareEl.innerHTML = `Base fare <strong>${fmtKRW(TRANSPORT_INFO.fareBase)}</strong> with T-money (first 10 km). ${escapeHtml(TRANSPORT_INFO.fareStep)}`;
+    const now = new Date();
+    const nowM = now.getHours() * 60 + now.getMinutes();
+    $("#metro-clock").textContent = now.toLocaleTimeString("en-US", { hour: "2-digit", minute: "2-digit" });
+    const root = $("#metro-lines");
+    root.innerHTML = "";
+    METRO_LINES.forEach(line => {
+      const nx = nextTrain(line, nowM);
+      const next = nx.closed
+        ? `<div class="nt closed">Closed</div><div class="freq">${line.first}–${line.last}</div>`
+        : `<div class="nt">${nx.wait <= 0 ? "Arriving" : "~" + nx.wait + " min"}</div>
+           <div class="freq">every ${nx.head} min${nx.peak ? " · peak" : ""}</div>`;
+      const row = document.createElement("div");
+      row.className = "metro-line";
+      row.innerHTML = `<div class="metro-badge" style="background:${line.color}">${escapeHtml(line.id)}</div>
+        <div class="metro-info"><div class="mn">${escapeHtml(line.name)}</div>
+        <div class="ms" title="${escapeAttr(line.note)}">${escapeHtml(line.note)}</div></div>
+        <div class="metro-next">${next}</div>`;
+      root.appendChild(row);
+    });
+    $("#metro-notes").innerHTML = TRANSPORT_INFO.notes.map(n => `<li>${escapeHtml(n)}</li>`).join("");
   }
 
   // ---------- Currency ----------
@@ -1343,6 +1475,8 @@ const TIPS = [
     renderPhrases();
     renderTips();
     renderLegend();
+    renderMetro();
+    setInterval(renderMetro, 30000);  // refresh next-train estimates
     renderPacking();
     setupConverter();
     $("#trip-title").textContent = state.itinerary.title.split("·")[0].trim() || "Seoul";
@@ -1362,7 +1496,7 @@ const TIPS = [
     });
 
     // drawer
-    const openDrawer = () => { $("#drawer").hidden = false; $("#drawer-backdrop").hidden = false; };
+    const openDrawer = () => { $("#drawer").hidden = false; $("#drawer-backdrop").hidden = false; renderMetro(); };
     const closeDrawer = () => { $("#drawer").hidden = true; $("#drawer-backdrop").hidden = true; };
     $("#menu-btn").addEventListener("click", openDrawer);
     $("#drawer-close").addEventListener("click", closeDrawer);

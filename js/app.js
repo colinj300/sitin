@@ -165,6 +165,7 @@
               <h2>${escapeHtml(day.title)}</h2>
               <div class="theme">${escapeHtml(day.theme || "")}</div>
               <div class="area">📍 ${escapeHtml(day.area || "Seoul")}</div>
+              ${day.transport ? `<div class="day-transport">🚇 ${escapeHtml(day.transport)}</div>` : ""}
             </div>
           </div>
           <div class="day-meta">
@@ -458,6 +459,7 @@
     $("#d-title").value = day.title || "";
     $("#d-theme").value = day.theme || "";
     $("#d-area").value = day.area || "";
+    $("#d-transport").value = day.transport || "";
     $("#day-modal-backdrop").hidden = false;
     setTimeout(() => $("#d-title").focus(), 50);
   }
@@ -471,6 +473,7 @@
       title,
       theme: $("#d-theme").value.trim(),
       area: $("#d-area").value.trim() || "Seoul",
+      transport: $("#d-transport").value.trim() || undefined,
       date: $("#d-date").value || undefined
     };
     if (idxRaw === "") {
@@ -522,6 +525,48 @@
   function renderLegend() {
     $("#map-legend").innerHTML = Object.values(TYPE_META).map(m =>
       `<span><i class="dot" style="background:${m.color}"></i>${m.label}</span>`).join("");
+  }
+
+  // ---------- Metro / transport (offline next-train estimates) ----------
+  const tmin = s => { const [h, m] = s.split(":").map(Number); return h * 60 + m; };
+  const isPeakNow = nowM => TRANSPORT_INFO.peakWindows.some(([a, b]) => nowM >= tmin(a) && nowM < tmin(b));
+  function nextTrain(line, nowM) {
+    const peak = isPeakNow(nowM);
+    const head = peak ? line.headPeak : line.headOff;
+    let firstM = tmin(line.first), lastM = tmin(line.last);
+    if (lastM <= firstM) lastM += 1440;             // service crosses midnight
+    let nm = nowM; if (nm < firstM) nm += 1440;     // we might be in the post-midnight tail
+    if (nm < firstM || nm > lastM) return { closed: true, head };
+    const offset = nm - firstM;
+    let wait = head - (offset % head);
+    if (wait === head) wait = 0;                    // exactly on a departure
+    if (nm + wait > lastM) return { closed: true, head };
+    return { closed: false, wait: Math.round(wait), head, peak };
+  }
+  function renderMetro() {
+    const fareEl = $("#metro-fare");
+    if (!fareEl) return;
+    fareEl.innerHTML = `Base fare <strong>${fmtKRW(TRANSPORT_INFO.fareBase)}</strong> with T-money (first 10 km). ${escapeHtml(TRANSPORT_INFO.fareStep)}`;
+    const now = new Date();
+    const nowM = now.getHours() * 60 + now.getMinutes();
+    $("#metro-clock").textContent = now.toLocaleTimeString("en-US", { hour: "2-digit", minute: "2-digit" });
+    const root = $("#metro-lines");
+    root.innerHTML = "";
+    METRO_LINES.forEach(line => {
+      const nx = nextTrain(line, nowM);
+      const next = nx.closed
+        ? `<div class="nt closed">Closed</div><div class="freq">${line.first}–${line.last}</div>`
+        : `<div class="nt">${nx.wait <= 0 ? "Arriving" : "~" + nx.wait + " min"}</div>
+           <div class="freq">every ${nx.head} min${nx.peak ? " · peak" : ""}</div>`;
+      const row = document.createElement("div");
+      row.className = "metro-line";
+      row.innerHTML = `<div class="metro-badge" style="background:${line.color}">${escapeHtml(line.id)}</div>
+        <div class="metro-info"><div class="mn">${escapeHtml(line.name)}</div>
+        <div class="ms" title="${escapeAttr(line.note)}">${escapeHtml(line.note)}</div></div>
+        <div class="metro-next">${next}</div>`;
+      root.appendChild(row);
+    });
+    $("#metro-notes").innerHTML = TRANSPORT_INFO.notes.map(n => `<li>${escapeHtml(n)}</li>`).join("");
   }
 
   // ---------- Currency ----------
@@ -591,6 +636,8 @@
     renderPhrases();
     renderTips();
     renderLegend();
+    renderMetro();
+    setInterval(renderMetro, 30000);  // refresh next-train estimates
     renderPacking();
     setupConverter();
     $("#trip-title").textContent = state.itinerary.title.split("·")[0].trim() || "Seoul";
@@ -610,7 +657,7 @@
     });
 
     // drawer
-    const openDrawer = () => { $("#drawer").hidden = false; $("#drawer-backdrop").hidden = false; };
+    const openDrawer = () => { $("#drawer").hidden = false; $("#drawer-backdrop").hidden = false; renderMetro(); };
     const closeDrawer = () => { $("#drawer").hidden = true; $("#drawer-backdrop").hidden = true; };
     $("#menu-btn").addEventListener("click", openDrawer);
     $("#drawer-close").addEventListener("click", closeDrawer);

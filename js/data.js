@@ -10,6 +10,7 @@ const DEFAULT_ITINERARY = {
       title: "Arrival & Myeongdong",
       theme: "Settle in, first taste of the city",
       area: "Jung-gu",
+      transport: "AREX from Incheon to Seoul Station, then Line 4 to Myeongdong (Exit 6–7).",
       items: [
         { time: "14:00", type: "transport", name: "Arrive Incheon (ICN) → AREX train", cost: 4750, coords: [37.4602, 126.4407], notes: "AREX All-Stop to Seoul Station (~60 min). T-money card recommended.", url: "https://www.arex.or.kr/main.do" },
         { time: "16:00", type: "rest", name: "Check in to hotel", cost: 0, coords: [37.5636, 126.9826], notes: "Drop bags, freshen up. Myeongdong is central & convenient." },
@@ -22,6 +23,7 @@ const DEFAULT_ITINERARY = {
       title: "Palaces & Old Seoul",
       theme: "Joseon-era grandeur",
       area: "Jongno-gu",
+      transport: "Line 3 to Gyeongbokgung (Exit 5), or Anguk (Exit 2) for Bukchon & Insadong.",
       items: [
         { time: "09:00", type: "sight", name: "Gyeongbokgung Palace", cost: 3000, coords: [37.5796, 126.9770], notes: "Wear a hanbok (rental ~₩15k) to enter free! Catch the Changing of the Guard at 10:00.", url: "https://www.royalpalace.go.kr/" },
         { time: "11:00", type: "sight", name: "National Folk Museum of Korea", cost: 0, coords: [37.5817, 126.9799], notes: "Inside palace grounds. Free entry." },
@@ -35,6 +37,7 @@ const DEFAULT_ITINERARY = {
       title: "Namsan & Itaewon",
       theme: "City views and global flavors",
       area: "Yongsan-gu",
+      transport: "Line 4 to Myeongdong for the Namsan cable car; Line 6 to Itaewon (Exit 1–3).",
       items: [
         { time: "10:00", type: "activity", name: "Namsan Cable Car", cost: 14000, coords: [37.5512, 126.9882], notes: "Round trip. Or hike up (~30 min) for free." },
         { time: "10:45", type: "sight", name: "N Seoul Tower", cost: 16000, coords: [37.5512, 126.9882], notes: "Observation deck + love locks. Great panoramic views.", url: "https://www.nseoultower.co.kr/" },
@@ -47,6 +50,7 @@ const DEFAULT_ITINERARY = {
       title: "Hongdae Youth Culture",
       theme: "Indie, street art, nightlife",
       area: "Mapo-gu",
+      transport: "Line 2, AREX, or Gyeongui–Jungang to Hongik Univ (Exit 9). Yeonnam-dong is north.",
       items: [
         { time: "11:00", type: "activity", name: "Hongdae Free Market & street performances", cost: 0, coords: [37.5563, 126.9236], notes: "Buskers, art market (weekends), youthful energy." },
         { time: "12:30", type: "food", name: "Korean BBQ lunch", cost: 25000, coords: [37.5558, 126.9230], notes: "Samgyeopsal (pork belly) — grill it yourself." },
@@ -59,6 +63,7 @@ const DEFAULT_ITINERARY = {
       title: "Gangnam & COEX",
       theme: "Modern, upscale Seoul",
       area: "Gangnam-gu",
+      transport: "Line 2 to Samseong for COEX (Exit 5–6); Line 9 to Bongeunsa; Line 3 to Apgujeong.",
       items: [
         { time: "10:00", type: "sight", name: "Bongeunsa Temple", cost: 0, coords: [37.5150, 127.0573], notes: "Serene Buddhist temple amid skyscrapers. Temple-stay programs available." },
         { time: "11:30", type: "sight", name: "Starfield Library (COEX Mall)", cost: 0, coords: [37.5126, 127.0590], notes: "Iconic giant open library. Free, very photogenic." },
@@ -71,6 +76,7 @@ const DEFAULT_ITINERARY = {
       title: "DMZ Day Trip",
       theme: "The world's most fortified border",
       area: "Paju / Gyeonggi-do",
+      transport: "Guided tour bus only — the DMZ cannot be visited independently. Tours pick up centrally.",
       items: [
         { time: "07:30", type: "transport", name: "Join DMZ tour (pickup)", cost: 60000, coords: [37.5636, 126.9826], notes: "Book a guided tour in advance (passport required). Imjingak departure." },
         { time: "09:30", type: "sight", name: "Imjingak Park & Freedom Bridge", cost: 0, coords: [37.8895, 126.7400], notes: "Memorials, rusted train, ribbons of hope." },
@@ -84,6 +90,7 @@ const DEFAULT_ITINERARY = {
       title: "Dongdaemun & Markets",
       theme: "Shopping, design, night markets",
       area: "Jung-gu",
+      transport: "Line 2/4/5 to Dongdaemun History & Culture Park (DDP, Exit 1).",
       items: [
         { time: "11:00", type: "sight", name: "Dongdaemun Design Plaza (DDP)", cost: 0, coords: [37.5669, 127.0095], notes: "Zaha Hadid landmark. Exhibitions, LED rose garden at night.", url: "https://www.ddp.or.kr/" },
         { time: "13:00", type: "food", name: "Majang-dong / local lunch", cost: 14000, coords: [37.5700, 127.0240], notes: "Or grab makgeolli + jeon nearby." },
@@ -96,6 +103,7 @@ const DEFAULT_ITINERARY = {
       title: "Nami Island Day Trip",
       theme: "Tree-lined romance & nature",
       area: "Chuncheon / Gangwon",
+      transport: "Gyeongchun Line or ITX-Cheongchun to Gapyeong (~1 hr), then shuttle bus to Nami ferry.",
       items: [
         { time: "08:00", type: "transport", name: "ITX-Cheong to Gapyeong", cost: 9000, coords: [37.5547, 126.9707], notes: "From Yongsan/Cheongnyangni (~1hr). Or Gyeongchun subway line." },
         { time: "10:00", type: "sight", name: "Nami Island (ferry + entry)", cost: 16000, coords: [37.7906, 127.5256], notes: "Famous metasequoia lanes (Winter Sonata). Bike rentals available." },
@@ -108,6 +116,7 @@ const DEFAULT_ITINERARY = {
       title: "Murals, Hilltops & Hanok",
       theme: "Hidden creative corners",
       area: "Jongno-gu",
+      transport: "Line 4 to Hyehwa (Exit 2) for Ihwa & Naksan; Line 3 to Anguk for Changdeokgung.",
       items: [
         { time: "10:00", type: "sight", name: "Ihwa Mural Village", cost: 0, coords: [37.5790, 127.0060], notes: "Hillside art village. Quiet streets, painted stairs." },
         { time: "11:30", type: "activity", name: "Naksan Park & Seoul City Wall", cost: 0, coords: [37.5805, 127.0073], notes: "Walk a stretch of the fortress wall with great views." },
@@ -120,6 +129,7 @@ const DEFAULT_ITINERARY = {
       title: "Seongsu & Seoul Forest",
       theme: "Brooklyn of Seoul — cafes & design",
       area: "Seongdong-gu",
+      transport: "Suin–Bundang Line to Seoul Forest, or Line 2 to Seongsu (Exit 3) for the cafe district.",
       items: [
         { time: "10:30", type: "sight", name: "Seoul Forest Park", cost: 0, coords: [37.5444, 127.0374], notes: "Deer park, wetlands, art. Free and spacious." },
         { time: "12:00", type: "food", name: "Seongsu-dong brunch", cost: 17000, coords: [37.5444, 127.0557], notes: "Converted warehouse cafes, specialty coffee." },
@@ -132,6 +142,7 @@ const DEFAULT_ITINERARY = {
       title: "Lotte World & Jamsil",
       theme: "Theme park fun",
       area: "Songpa-gu",
+      transport: "Line 2 or 8 to Jamsil (Exit 4) — directly connected to Lotte World underground.",
       items: [
         { time: "10:00", type: "activity", name: "Lotte World (Adventure + Magic Island)", cost: 62000, coords: [37.5111, 127.0980], notes: "Largest indoor theme park. Buy day pass online for slight discount.", url: "https://adventure.lotteworld.com/" },
         { time: "13:00", type: "food", name: "Lunch inside park / food street", cost: 14000, coords: [37.5111, 127.0980], notes: "Plenty of options on site." },
@@ -143,6 +154,7 @@ const DEFAULT_ITINERARY = {
       title: "Suwon Hwaseong Day Trip",
       theme: "Fortress walls & history",
       area: "Suwon / Gyeonggi-do",
+      transport: "Line 1 to Suwon Station (~1 hr), then bus 11/13/36 or taxi to Hwaseong Fortress.",
       items: [
         { time: "09:00", type: "transport", name: "Subway/Train to Suwon", cost: 2000, coords: [37.5547, 126.9707], notes: "Line 1 to Suwon Station (~1hr)." },
         { time: "10:30", type: "sight", name: "Hwaseong Fortress walk", cost: 1000, coords: [37.2880, 127.0150], notes: "UNESCO 18th-century fortress. Walk the full ~5.7km wall loop." },
@@ -156,6 +168,7 @@ const DEFAULT_ITINERARY = {
       title: "Museums & Hangang",
       theme: "Culture and the river",
       area: "Yongsan-gu",
+      transport: "Line 4 or Gyeongui–Jungang to Ichon (Exit 2) for the National Museum; Line 5 to Yeouinaru for the river.",
       items: [
         { time: "10:00", type: "sight", name: "National Museum of Korea", cost: 0, coords: [37.5240, 126.9803], notes: "Free, world-class. Don't miss the Pensive Bodhisattva.", url: "https://www.museum.go.kr/" },
         { time: "13:00", type: "food", name: "Lunch near Ichon", cost: 13000, coords: [37.5220, 126.9760], notes: "" },
@@ -168,6 +181,7 @@ const DEFAULT_ITINERARY = {
       title: "Last Bites & Departure",
       theme: "Souvenirs and farewell",
       area: "Jung-gu",
+      transport: "Line 4 to Seoul Station, then AREX to Incheon Airport. Allow 3+ hrs before your flight.",
       items: [
         { time: "09:00", type: "shopping", name: "Last-minute souvenirs", cost: 30000, coords: [37.5609, 126.9858], notes: "Snacks, K-beauty, gifts. Namdaemun Market is great & cheap." },
         { time: "10:30", type: "food", name: "Final Korean breakfast/brunch", cost: 12000, coords: [37.5594, 126.9776], notes: "Maybe gukbap or a last bowl of bibimbap." },
@@ -211,3 +225,38 @@ const TIPS = [
   "Tax-free shopping: spend ₩15,000+ at participating stores and claim a refund at the airport.",
   "Cafés are everywhere and double as workspaces/rest stops — use them to recharge."
 ];
+
+/* ---------- Transport ---------- */
+// Seoul Metro lines. Times are typical published schedules (offline estimates, not live).
+// headPeak / headOff = minutes between trains (peak vs off-peak). Hours in 24h "HH:MM".
+const METRO_LINES = [
+  { id: "1", name: "Line 1",  color: "#0052A4", headPeak: 4, headOff: 7,  first: "05:15", last: "00:00", note: "Soyosan ↔ Incheon/Sinchang. Oldest, longest line." },
+  { id: "2", name: "Line 2",  color: "#00A84D", headPeak: 2.5, headOff: 5, first: "05:30", last: "00:30", note: "Green loop line — Hongik Univ, Gangnam, Jamsil, City Hall." },
+  { id: "3", name: "Line 3",  color: "#EF7C1C", headPeak: 3.5, headOff: 6, first: "05:20", last: "00:10", note: "Gyeongbokgung, Anguk (Bukchon), Apgujeong, Express Bus Terminal." },
+  { id: "4", name: "Line 4",  color: "#00A4E3", headPeak: 3.5, headOff: 6, first: "05:25", last: "00:05", note: "Myeongdong, Dongdaemun, Seoul Station, Hyehwa." },
+  { id: "5", name: "Line 5",  color: "#996CAC", headPeak: 4, headOff: 7,  first: "05:30", last: "00:00", note: "Gimpo Airport, Yeouido, Gwanghwamun, Dongdaemun History & Culture Park." },
+  { id: "6", name: "Line 6",  color: "#CD7C2F", headPeak: 4.5, headOff: 8, first: "05:30", last: "00:00", note: "Itaewon, Hangangjin, World Cup Stadium, Sangsu (Hongdae)." },
+  { id: "7", name: "Line 7",  color: "#747F00", headPeak: 4, headOff: 7,  first: "05:30", last: "00:00", note: "Gangnam (Express Bus Terminal), Konkuk Univ, Ttukseom Resort." },
+  { id: "8", name: "Line 8",  color: "#E6186C", headPeak: 5, headOff: 9,  first: "05:30", last: "23:50", note: "Jamsil, Lotte World, Seokchon, Moran." },
+  { id: "9", name: "Line 9",  color: "#BDB092", headPeak: 4, headOff: 7,  first: "05:30", last: "00:00", note: "Gimpo Airport ↔ Gangnam. Express trains skip stops (faster)." },
+  { id: "A", name: "AREX (Airport)", color: "#0090D2", headPeak: 6, headOff: 12, first: "05:20", last: "00:00", note: "Incheon Airport ↔ Seoul Station. All-stop ₩4,750; Express ~43 min." },
+  { id: "SB", name: "Sinbundang", color: "#D4003B", headPeak: 5, headOff: 8, first: "05:30", last: "00:00", note: "Gangnam ↔ Gwanggyo. Fast, but small surcharge on top of base fare." },
+  { id: "GB", name: "Suin–Bundang", color: "#FABE00", headPeak: 6, headOff: 10, first: "05:30", last: "00:00", note: "Wangsimni, Seoul Forest, Apgujeong Rodeo, Gangnam-gu Office." }
+];
+
+const TRANSPORT_INFO = {
+  fareBase: 1400,           // KRW, base fare with T-money (first 10 km)
+  fareStep: "+₩100 per 5 km beyond 10 km (≈ +₩100 per ~5 km up to 50 km).",
+  cashSurcharge: 100,       // single-journey paper ticket costs ₩100 more + ₩500 refundable deposit
+  transferFree: true,
+  peakWindows: [["07:00", "09:00"], ["18:00", "20:00"]],
+  notes: [
+    "Tap a T-money card on entry AND exit — fares are distance-based.",
+    "Transfers between subway lines and to buses are free within 30 min (4 transfers).",
+    "Buy/refill T-money at any convenience store or station machine. ₩500 buys the card.",
+    "Use Naver Map or KakaoMap for live routing — Google Maps transit is limited in Korea.",
+    "Trains are frequent: every 2–5 min at peak, 6–10 min late evening. Avoid 08:00–09:00 rush.",
+    "Last trains leave terminals around midnight — check the last-train time for your line."
+  ]
+};
+
