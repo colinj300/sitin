@@ -1701,9 +1701,20 @@ const TRANSPORT_INFO = {
       FIREBASE_CONFIG.databaseURL && !/YOUR_/.test(JSON.stringify(FIREBASE_CONFIG));
   }
   function initSync() {
-    if (!isConfigured() || typeof firebase === "undefined") {
+    const configured = isConfigured();
+    const fbLoaded = typeof firebase !== "undefined" && firebase && firebase.database;
+    console.log("[sync] configured:", configured, "· firebase loaded:", !!fbLoaded,
+      "· project:", configured ? FIREBASE_CONFIG.projectId : "(none)");
+    if (!configured) {
       $("#sync-on").hidden = true; $("#sync-off").hidden = false;
-      setSyncStatus("local", "Local only — changes stay on this device.");
+      $("#sync-off").innerHTML = `<p class="muted small">This build has no Firebase config — you're viewing an older version of the app. Re-download the latest file (or hard-refresh the page) and it'll connect automatically.</p>`;
+      setSyncStatus("local", "Local only (old build — no config).");
+      return;
+    }
+    if (!fbLoaded) {
+      $("#sync-on").hidden = true; $("#sync-off").hidden = false;
+      $("#sync-off").innerHTML = `<p class="muted small">Sync is configured (project <b>${escapeHtml(FIREBASE_CONFIG.projectId)}</b>) but the Firebase library didn't load — usually an ad-blocker / privacy extension, a strict network, or no internet. Allow <code>gstatic.com</code> for this page and reload.</p>`;
+      setSyncStatus("error", "Firebase library blocked or offline.");
       return;
     }
     $("#sync-off").hidden = true; $("#sync-on").hidden = false;
