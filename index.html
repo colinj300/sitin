@@ -88,6 +88,13 @@
     </div>
 
     <div class="drawer-section">
+      <h3>⭐ Saved places (quick add)</h3>
+      <p class="muted small">Hardcode spots you reuse — home, hotel, a favourite café. Then drop one onto any day in a click, with the address & details pre-filled.</p>
+      <div id="places-list" class="places-list"></div>
+      <button id="place-add" class="btn small">＋ Add a place</button>
+    </div>
+
+    <div class="drawer-section">
       <h3>🚇 Getting around · Seoul Metro</h3>
       <p class="muted small" id="metro-fare"></p>
       <div class="metro-now small muted">Estimated next trains for <strong id="metro-clock">now</strong> · typical schedule, not live</div>
@@ -157,6 +164,7 @@
       </div>
       <form id="activity-form">
         <input type="hidden" id="f-itemIndex" />
+        <div class="quickfill" id="quickfill-row" hidden></div>
         <div class="form-grid">
           <label class="full">Day
             <select id="f-day"></select>
@@ -209,6 +217,39 @@
         <div class="btn-row end">
           <button type="button" class="btn danger" id="d-delete" hidden>Delete day</button>
           <button type="submit" class="btn primary">Save</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- Saved place editor modal -->
+  <div class="modal-backdrop" id="place-modal-backdrop" hidden>
+    <div class="modal" role="dialog" aria-modal="true" aria-labelledby="place-modal-title">
+      <div class="drawer-head">
+        <h2 id="place-modal-title">Saved place</h2>
+        <button class="icon-btn" id="place-modal-close" aria-label="Close">✕</button>
+      </div>
+      <form id="place-form">
+        <input type="hidden" id="p-id" />
+        <div class="form-grid">
+          <label>Icon <input type="text" id="p-emoji" maxlength="2" placeholder="🏠" /></label>
+          <label>Type <select id="p-type"></select></label>
+          <label class="full">Name <input type="text" id="p-name" required placeholder="e.g. Home / Airbnb" /></label>
+          <label class="full">Address (for the map)
+            <span class="addr-row">
+              <input type="text" id="p-address" placeholder="e.g. 105 Itaewon-ro, Yongsan-gu, Seoul" />
+              <button type="button" class="btn small" id="p-geocode" title="Look up coordinates from the address">📍 Find</button>
+            </span>
+          </label>
+          <label class="full">Coordinates (lat, lng) <input type="text" id="p-coords" placeholder="auto-filled by Find, or enter manually" /></label>
+          <label>Default time <input type="time" id="p-time" /></label>
+          <label>Default cost (₩) <input type="number" id="p-cost" min="0" placeholder="0" /></label>
+          <label class="full">Link (URL) <input type="url" id="p-url" placeholder="https://…" /></label>
+          <label class="full">Notes <textarea id="p-notes" rows="2" placeholder="Anything to pre-fill…"></textarea></label>
+        </div>
+        <div class="btn-row end">
+          <button type="button" class="btn danger" id="p-delete" hidden>Delete</button>
+          <button type="submit" class="btn primary">Save place</button>
         </div>
       </form>
     </div>

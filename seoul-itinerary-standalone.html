@@ -282,6 +282,31 @@ input:focus, select:focus, textarea:focus { outline: 2px solid var(--accent); ou
 .metro-next .nt { font-size: 13px; font-weight: 700; }
 .metro-next .nt.closed { color: var(--danger); font-weight: 600; font-size: 11px; }
 .metro-next .freq { font-size: 10px; color: var(--muted); }
+/* Saved places */
+.places-list { display: flex; flex-direction: column; gap: 7px; margin-bottom: 10px; }
+.place-row {
+  display: flex; align-items: center; gap: 10px; padding: 8px 10px;
+  border: 1px solid var(--border); border-radius: 10px; background: var(--surface);
+}
+.place-emoji { font-size: 20px; flex-shrink: 0; }
+.place-info { flex: 1; min-width: 0; }
+.place-info .pn { font-size: 13px; font-weight: 600; }
+.place-info .ps { font-size: 11px; color: var(--muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.icon-mini {
+  background: var(--surface-2); border: 1px solid var(--border); border-radius: 8px;
+  width: 30px; height: 30px; font-size: 13px; color: var(--text); flex-shrink: 0;
+}
+.icon-mini:hover { background: var(--accent-soft); }
+.addr-row { display: flex; gap: 6px; }
+.addr-row input { flex: 1; }
+.addr-row .btn { white-space: nowrap; }
+
+/* Quick-fill chips inside the add-activity form */
+.quickfill { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; margin-bottom: 14px; }
+.qf-label { font-size: 12px; color: var(--muted); margin-right: 2px; }
+.qf-chip { cursor: pointer; }
+.qf-chip:hover { background: var(--accent); color: #fff; border-color: var(--accent); }
+
 .metro-details { margin-top: 12px; }
 .metro-details summary { cursor: pointer; font-size: 13px; color: var(--accent); }
 .metro-details .tips { margin-top: 8px; }
@@ -441,6 +466,13 @@ input:focus, select:focus, textarea:focus { outline: 2px solid var(--accent); ou
     </div>
 
     <div class="drawer-section">
+      <h3>⭐ Saved places (quick add)</h3>
+      <p class="muted small">Hardcode spots you reuse — home, hotel, a favourite café. Then drop one onto any day in a click, with the address & details pre-filled.</p>
+      <div id="places-list" class="places-list"></div>
+      <button id="place-add" class="btn small">＋ Add a place</button>
+    </div>
+
+    <div class="drawer-section">
       <h3>🚇 Getting around · Seoul Metro</h3>
       <p class="muted small" id="metro-fare"></p>
       <div class="metro-now small muted">Estimated next trains for <strong id="metro-clock">now</strong> · typical schedule, not live</div>
@@ -510,6 +542,7 @@ input:focus, select:focus, textarea:focus { outline: 2px solid var(--accent); ou
       </div>
       <form id="activity-form">
         <input type="hidden" id="f-itemIndex" />
+        <div class="quickfill" id="quickfill-row" hidden></div>
         <div class="form-grid">
           <label class="full">Day
             <select id="f-day"></select>
@@ -562,6 +595,39 @@ input:focus, select:focus, textarea:focus { outline: 2px solid var(--accent); ou
         <div class="btn-row end">
           <button type="button" class="btn danger" id="d-delete" hidden>Delete day</button>
           <button type="submit" class="btn primary">Save</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- Saved place editor modal -->
+  <div class="modal-backdrop" id="place-modal-backdrop" hidden>
+    <div class="modal" role="dialog" aria-modal="true" aria-labelledby="place-modal-title">
+      <div class="drawer-head">
+        <h2 id="place-modal-title">Saved place</h2>
+        <button class="icon-btn" id="place-modal-close" aria-label="Close">✕</button>
+      </div>
+      <form id="place-form">
+        <input type="hidden" id="p-id" />
+        <div class="form-grid">
+          <label>Icon <input type="text" id="p-emoji" maxlength="2" placeholder="🏠" /></label>
+          <label>Type <select id="p-type"></select></label>
+          <label class="full">Name <input type="text" id="p-name" required placeholder="e.g. Home / Airbnb" /></label>
+          <label class="full">Address (for the map)
+            <span class="addr-row">
+              <input type="text" id="p-address" placeholder="e.g. 105 Itaewon-ro, Yongsan-gu, Seoul" />
+              <button type="button" class="btn small" id="p-geocode" title="Look up coordinates from the address">📍 Find</button>
+            </span>
+          </label>
+          <label class="full">Coordinates (lat, lng) <input type="text" id="p-coords" placeholder="auto-filled by Find, or enter manually" /></label>
+          <label>Default time <input type="time" id="p-time" /></label>
+          <label>Default cost (₩) <input type="number" id="p-cost" min="0" placeholder="0" /></label>
+          <label class="full">Link (URL) <input type="url" id="p-url" placeholder="https://…" /></label>
+          <label class="full">Notes <textarea id="p-notes" rows="2" placeholder="Anything to pre-fill…"></textarea></label>
+        </div>
+        <div class="btn-row end">
+          <button type="button" class="btn danger" id="p-delete" hidden>Delete</button>
+          <button type="submit" class="btn primary">Save place</button>
         </div>
       </form>
     </div>
@@ -851,8 +917,9 @@ const TRANSPORT_INFO = {
   function freshState() {
     return {
       itinerary: structuredClone(DEFAULT_ITINERARY),
-      done: {},            // "d-i" -> true
+      done: {},            // item id -> true
       packing: defaultPacking(),
+      places: defaultPlaces(),
       theme: "light",
       activeFilters: [],   // type filter; empty = all
       search: "",
@@ -860,6 +927,12 @@ const TRANSPORT_INFO = {
       rate: 1370,
       activeDay: 0
     };
+  }
+  function defaultPlaces() {
+    // Reusable spots. ids are assigned by ensureIds(). Edit "Home" with your own address.
+    return [
+      { emoji: "🏠", name: "Home / Airbnb", type: "rest", address: "", coords: null, cost: 0, time: "", url: "", notes: "Back to the Airbnb to rest." }
+    ];
   }
   function defaultPacking() {
     return [
@@ -885,6 +958,7 @@ const TRANSPORT_INFO = {
   const uid = () => "i" + Math.random().toString(36).slice(2, 9) + Date.now().toString(36).slice(-4);
   function ensureIds() {
     state.itinerary.days.forEach(day => day.items.forEach(it => { if (!it.id) it.id = uid(); }));
+    (state.places || (state.places = [])).forEach(p => { if (!p.id) p.id = uid(); });
   }
   // Migrate legacy "dayIndex-itemIndex" completion keys to id-based keys (one-time).
   function migrateDone() {
@@ -1156,8 +1230,7 @@ const TRANSPORT_INFO = {
   }
 
   // ---------- Modal (add/edit) ----------
-  function buildTypeSelect() {
-    const sel = $("#f-type");
+  function fillTypeSelect(sel) {
     sel.innerHTML = "";
     Object.entries(TYPE_META).forEach(([t, m]) => {
       const o = document.createElement("option");
@@ -1165,6 +1238,7 @@ const TRANSPORT_INFO = {
       sel.appendChild(o);
     });
   }
+  function buildTypeSelect() { fillTypeSelect($("#f-type")); fillTypeSelect($("#p-type")); }
   let editingId = null;  // id of the item being edited, or null when adding
 
   function buildDaySelect(selectedIndex) {
@@ -1215,6 +1289,7 @@ const TRANSPORT_INFO = {
     $("#f-url").value = it.url || "";
     $("#f-notes").value = it.notes || "";
     $("#f-coords").value = Array.isArray(it.coords) ? it.coords.join(", ") : "";
+    renderQuickfill(editing);  // saved-place shortcuts (only useful when adding)
     $("#modal-backdrop").hidden = false;
     setTimeout(() => $("#f-name").focus(), 50);
   }
@@ -1335,6 +1410,123 @@ const TRANSPORT_INFO = {
     save(); closeDayModal(); refreshAll(); toast("Day deleted");
   }
 
+  // ---------- Saved places (reusable presets) ----------
+  function renderPlaces() {
+    const root = $("#places-list");
+    root.innerHTML = "";
+    if (!state.places.length) {
+      root.innerHTML = `<p class="muted small">No saved places yet. Add your Airbnb, hotel, or go-to spots.</p>`;
+      return;
+    }
+    state.places.forEach(p => {
+      const meta = TYPE_META[p.type] || TYPE_META.rest;
+      const sub = p.address ? p.address : (Array.isArray(p.coords) ? "📍 location set" : "no location yet");
+      const row = document.createElement("div");
+      row.className = "place-row";
+      row.innerHTML = `<span class="place-emoji">${escapeHtml(p.emoji || "📍")}</span>
+        <div class="place-info">
+          <div class="pn">${escapeHtml(p.name)}</div>
+          <div class="ps">${meta.icon} ${meta.label} · ${escapeHtml(sub)}</div>
+        </div>
+        <button class="btn small" data-place-add="${p.id}" title="Add to a day">＋ Add</button>
+        <button class="icon-mini" data-place-edit="${p.id}" title="Edit">✏️</button>`;
+      root.appendChild(row);
+    });
+  }
+  function renderQuickfill(editing) {
+    const root = $("#quickfill-row");
+    root.innerHTML = "";
+    if (editing || !state.places.length) { root.hidden = true; return; }
+    root.hidden = false;
+    const lbl = document.createElement("span");
+    lbl.className = "qf-label"; lbl.textContent = "Quick fill:";
+    root.appendChild(lbl);
+    state.places.forEach(p => {
+      const b = document.createElement("button");
+      b.type = "button"; b.className = "chip qf-chip";
+      b.innerHTML = `${escapeHtml(p.emoji || "📍")} ${escapeHtml(p.name)}`;
+      b.addEventListener("click", () => prefillActivityFromPlace(p));
+      root.appendChild(b);
+    });
+  }
+  function prefillActivityFromPlace(p) {
+    $("#f-name").value = p.name || "";
+    $("#f-type").value = p.type || "rest";
+    $("#f-cost").value = p.cost || "";
+    $("#f-url").value = p.url || "";
+    $("#f-notes").value = p.notes || p.address || "";
+    $("#f-coords").value = Array.isArray(p.coords) ? p.coords.join(", ") : "";
+    if (p.time) $("#f-time").value = p.time;
+    toast(`Filled from “${p.name}” — pick the day & time, then Save`);
+    $("#f-time").focus();
+  }
+  function openPlaceModal(id) {
+    const p = id ? state.places.find(x => x.id === id) || {} : {};
+    $("#p-id").value = id || "";
+    $("#place-modal-title").textContent = id ? "Edit place" : "New saved place";
+    $("#p-delete").hidden = !id;
+    $("#p-emoji").value = p.emoji || "";
+    $("#p-type").value = p.type || "rest";
+    $("#p-name").value = p.name || "";
+    $("#p-address").value = p.address || "";
+    $("#p-coords").value = Array.isArray(p.coords) ? p.coords.join(", ") : "";
+    $("#p-time").value = p.time || "";
+    $("#p-cost").value = p.cost || "";
+    $("#p-url").value = p.url || "";
+    $("#p-notes").value = p.notes || "";
+    $("#place-modal-backdrop").hidden = false;
+    setTimeout(() => $("#p-name").focus(), 50);
+  }
+  function closePlaceModal() { $("#place-modal-backdrop").hidden = true; }
+  function savePlace(e) {
+    e.preventDefault();
+    const name = $("#p-name").value.trim();
+    if (!name) return;
+    const data = {
+      emoji: $("#p-emoji").value.trim() || "📍",
+      name,
+      type: $("#p-type").value,
+      address: $("#p-address").value.trim(),
+      coords: parseCoords($("#p-coords").value),
+      time: $("#p-time").value,
+      cost: Number($("#p-cost").value) || 0,
+      url: $("#p-url").value.trim(),
+      notes: $("#p-notes").value.trim()
+    };
+    const id = $("#p-id").value;
+    if (id) {
+      Object.assign(state.places.find(x => x.id === id), data);
+      toast("Place updated");
+    } else {
+      data.id = uid(); state.places.push(data);
+      toast("Place saved");
+    }
+    save(); closePlaceModal(); renderPlaces();
+  }
+  function deletePlace() {
+    const id = $("#p-id").value;
+    if (!id) return;
+    if (!confirm("Delete this saved place?")) return;
+    state.places = state.places.filter(x => x.id !== id);
+    save(); closePlaceModal(); renderPlaces(); toast("Place deleted");
+  }
+  async function geocodePlace() {
+    const q = $("#p-address").value.trim();
+    if (!q) { toast("Enter an address first"); return; }
+    const btn = $("#p-geocode");
+    const orig = btn.textContent; btn.disabled = true; btn.textContent = "Searching…";
+    try {
+      const r = await fetch("https://nominatim.openstreetmap.org/search?format=json&limit=1&q=" + encodeURIComponent(q),
+        { headers: { "Accept": "application/json" } });
+      const j = await r.json();
+      if (j && j[0]) {
+        $("#p-coords").value = `${(+j[0].lat).toFixed(5)}, ${(+j[0].lon).toFixed(5)}`;
+        toast("Coordinates found ✓");
+      } else { toast("No match — enter coordinates manually"); }
+    } catch { toast("Lookup failed (offline?) — enter coordinates manually"); }
+    finally { btn.disabled = false; btn.textContent = orig; }
+  }
+
   // ---------- Packing ----------
   function renderPacking() {
     const ul = $("#packing-list");
@@ -1439,7 +1631,7 @@ const TRANSPORT_INFO = {
         if (!data.itinerary || !Array.isArray(data.itinerary.days)) throw new Error("bad file");
         Object.assign(state, freshState(), data);
         ensureIds(); migrateDone();
-        save(); applyTheme(); renderFilters(); refreshAll(); renderPacking();
+        save(); applyTheme(); renderFilters(); refreshAll(); renderPacking(); renderPlaces();
         $("#start-date").value = state.itinerary.startDate || "";
         $("#search").value = state.search || ""; $("#hide-done").checked = !!state.hideDone;
         toast("Imported successfully");
@@ -1524,7 +1716,7 @@ const TRANSPORT_INFO = {
       ensureIds(); save();
       applyTheme(); $("#start-date").value = state.itinerary.startDate;
       $("#search").value = ""; $("#hide-done").checked = false;
-      renderFilters(); renderPacking(); refreshAll(); toast("Reset to default");
+      renderFilters(); renderPacking(); renderPlaces(); refreshAll(); toast("Reset to default");
     });
 
     // add/edit buttons (delegated)
@@ -1552,9 +1744,28 @@ const TRANSPORT_INFO = {
     $("#day-form").addEventListener("submit", saveDay);
     $("#d-delete").addEventListener("click", deleteDay);
 
+    // saved places
+    renderPlaces();
+    $("#place-add").addEventListener("click", () => openPlaceModal(null));
+    $("#places-list").addEventListener("click", (e) => {
+      const add = e.target.closest("[data-place-add]");
+      if (add) {
+        const p = state.places.find(x => x.id === add.dataset.placeAdd);
+        if (p) { closeDrawer(); openModal(null, null); prefillActivityFromPlace(p); }
+        return;
+      }
+      const edit = e.target.closest("[data-place-edit]");
+      if (edit) openPlaceModal(edit.dataset.placeEdit);
+    });
+    $("#place-modal-close").addEventListener("click", closePlaceModal);
+    $("#place-modal-backdrop").addEventListener("click", (e) => { if (e.target.id === "place-modal-backdrop") closePlaceModal(); });
+    $("#place-form").addEventListener("submit", savePlace);
+    $("#p-delete").addEventListener("click", deletePlace);
+    $("#p-geocode").addEventListener("click", geocodePlace);
+
     // keyboard
     document.addEventListener("keydown", (e) => {
-      if (e.key === "Escape") { closeModal(); closeDayModal(); closeDrawer(); }
+      if (e.key === "Escape") { closeModal(); closeDayModal(); closePlaceModal(); closeDrawer(); }
     });
 
     // sync active day on scroll

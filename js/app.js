@@ -12,8 +12,9 @@
   function freshState() {
     return {
       itinerary: structuredClone(DEFAULT_ITINERARY),
-      done: {},            // "d-i" -> true
+      done: {},            // item id -> true
       packing: defaultPacking(),
+      places: defaultPlaces(),
       theme: "light",
       activeFilters: [],   // type filter; empty = all
       search: "",
@@ -21,6 +22,12 @@
       rate: 1370,
       activeDay: 0
     };
+  }
+  function defaultPlaces() {
+    // Reusable spots. ids are assigned by ensureIds(). Edit "Home" with your own address.
+    return [
+      { emoji: "🏠", name: "Home / Airbnb", type: "rest", address: "", coords: null, cost: 0, time: "", url: "", notes: "Back to the Airbnb to rest." }
+    ];
   }
   function defaultPacking() {
     return [
@@ -46,6 +53,7 @@
   const uid = () => "i" + Math.random().toString(36).slice(2, 9) + Date.now().toString(36).slice(-4);
   function ensureIds() {
     state.itinerary.days.forEach(day => day.items.forEach(it => { if (!it.id) it.id = uid(); }));
+    (state.places || (state.places = [])).forEach(p => { if (!p.id) p.id = uid(); });
   }
   // Migrate legacy "dayIndex-itemIndex" completion keys to id-based keys (one-time).
   function migrateDone() {
@@ -317,8 +325,7 @@
   }
 
   // ---------- Modal (add/edit) ----------
-  function buildTypeSelect() {
-    const sel = $("#f-type");
+  function fillTypeSelect(sel) {
     sel.innerHTML = "";
     Object.entries(TYPE_META).forEach(([t, m]) => {
       const o = document.createElement("option");
@@ -326,6 +333,7 @@
       sel.appendChild(o);
     });
   }
+  function buildTypeSelect() { fillTypeSelect($("#f-type")); fillTypeSelect($("#p-type")); }
   let editingId = null;  // id of the item being edited, or null when adding
 
   function buildDaySelect(selectedIndex) {
@@ -376,6 +384,7 @@
     $("#f-url").value = it.url || "";
     $("#f-notes").value = it.notes || "";
     $("#f-coords").value = Array.isArray(it.coords) ? it.coords.join(", ") : "";
+    renderQuickfill(editing);  // saved-place shortcuts (only useful when adding)
     $("#modal-backdrop").hidden = false;
     setTimeout(() => $("#f-name").focus(), 50);
   }
@@ -496,6 +505,123 @@
     save(); closeDayModal(); refreshAll(); toast("Day deleted");
   }
 
+  // ---------- Saved places (reusable presets) ----------
+  function renderPlaces() {
+    const root = $("#places-list");
+    root.innerHTML = "";
+    if (!state.places.length) {
+      root.innerHTML = `<p class="muted small">No saved places yet. Add your Airbnb, hotel, or go-to spots.</p>`;
+      return;
+    }
+    state.places.forEach(p => {
+      const meta = TYPE_META[p.type] || TYPE_META.rest;
+      const sub = p.address ? p.address : (Array.isArray(p.coords) ? "📍 location set" : "no location yet");
+      const row = document.createElement("div");
+      row.className = "place-row";
+      row.innerHTML = `<span class="place-emoji">${escapeHtml(p.emoji || "📍")}</span>
+        <div class="place-info">
+          <div class="pn">${escapeHtml(p.name)}</div>
+          <div class="ps">${meta.icon} ${meta.label} · ${escapeHtml(sub)}</div>
+        </div>
+        <button class="btn small" data-place-add="${p.id}" title="Add to a day">＋ Add</button>
+        <button class="icon-mini" data-place-edit="${p.id}" title="Edit">✏️</button>`;
+      root.appendChild(row);
+    });
+  }
+  function renderQuickfill(editing) {
+    const root = $("#quickfill-row");
+    root.innerHTML = "";
+    if (editing || !state.places.length) { root.hidden = true; return; }
+    root.hidden = false;
+    const lbl = document.createElement("span");
+    lbl.className = "qf-label"; lbl.textContent = "Quick fill:";
+    root.appendChild(lbl);
+    state.places.forEach(p => {
+      const b = document.createElement("button");
+      b.type = "button"; b.className = "chip qf-chip";
+      b.innerHTML = `${escapeHtml(p.emoji || "📍")} ${escapeHtml(p.name)}`;
+      b.addEventListener("click", () => prefillActivityFromPlace(p));
+      root.appendChild(b);
+    });
+  }
+  function prefillActivityFromPlace(p) {
+    $("#f-name").value = p.name || "";
+    $("#f-type").value = p.type || "rest";
+    $("#f-cost").value = p.cost || "";
+    $("#f-url").value = p.url || "";
+    $("#f-notes").value = p.notes || p.address || "";
+    $("#f-coords").value = Array.isArray(p.coords) ? p.coords.join(", ") : "";
+    if (p.time) $("#f-time").value = p.time;
+    toast(`Filled from “${p.name}” — pick the day & time, then Save`);
+    $("#f-time").focus();
+  }
+  function openPlaceModal(id) {
+    const p = id ? state.places.find(x => x.id === id) || {} : {};
+    $("#p-id").value = id || "";
+    $("#place-modal-title").textContent = id ? "Edit place" : "New saved place";
+    $("#p-delete").hidden = !id;
+    $("#p-emoji").value = p.emoji || "";
+    $("#p-type").value = p.type || "rest";
+    $("#p-name").value = p.name || "";
+    $("#p-address").value = p.address || "";
+    $("#p-coords").value = Array.isArray(p.coords) ? p.coords.join(", ") : "";
+    $("#p-time").value = p.time || "";
+    $("#p-cost").value = p.cost || "";
+    $("#p-url").value = p.url || "";
+    $("#p-notes").value = p.notes || "";
+    $("#place-modal-backdrop").hidden = false;
+    setTimeout(() => $("#p-name").focus(), 50);
+  }
+  function closePlaceModal() { $("#place-modal-backdrop").hidden = true; }
+  function savePlace(e) {
+    e.preventDefault();
+    const name = $("#p-name").value.trim();
+    if (!name) return;
+    const data = {
+      emoji: $("#p-emoji").value.trim() || "📍",
+      name,
+      type: $("#p-type").value,
+      address: $("#p-address").value.trim(),
+      coords: parseCoords($("#p-coords").value),
+      time: $("#p-time").value,
+      cost: Number($("#p-cost").value) || 0,
+      url: $("#p-url").value.trim(),
+      notes: $("#p-notes").value.trim()
+    };
+    const id = $("#p-id").value;
+    if (id) {
+      Object.assign(state.places.find(x => x.id === id), data);
+      toast("Place updated");
+    } else {
+      data.id = uid(); state.places.push(data);
+      toast("Place saved");
+    }
+    save(); closePlaceModal(); renderPlaces();
+  }
+  function deletePlace() {
+    const id = $("#p-id").value;
+    if (!id) return;
+    if (!confirm("Delete this saved place?")) return;
+    state.places = state.places.filter(x => x.id !== id);
+    save(); closePlaceModal(); renderPlaces(); toast("Place deleted");
+  }
+  async function geocodePlace() {
+    const q = $("#p-address").value.trim();
+    if (!q) { toast("Enter an address first"); return; }
+    const btn = $("#p-geocode");
+    const orig = btn.textContent; btn.disabled = true; btn.textContent = "Searching…";
+    try {
+      const r = await fetch("https://nominatim.openstreetmap.org/search?format=json&limit=1&q=" + encodeURIComponent(q),
+        { headers: { "Accept": "application/json" } });
+      const j = await r.json();
+      if (j && j[0]) {
+        $("#p-coords").value = `${(+j[0].lat).toFixed(5)}, ${(+j[0].lon).toFixed(5)}`;
+        toast("Coordinates found ✓");
+      } else { toast("No match — enter coordinates manually"); }
+    } catch { toast("Lookup failed (offline?) — enter coordinates manually"); }
+    finally { btn.disabled = false; btn.textContent = orig; }
+  }
+
   // ---------- Packing ----------
   function renderPacking() {
     const ul = $("#packing-list");
@@ -600,7 +726,7 @@
         if (!data.itinerary || !Array.isArray(data.itinerary.days)) throw new Error("bad file");
         Object.assign(state, freshState(), data);
         ensureIds(); migrateDone();
-        save(); applyTheme(); renderFilters(); refreshAll(); renderPacking();
+        save(); applyTheme(); renderFilters(); refreshAll(); renderPacking(); renderPlaces();
         $("#start-date").value = state.itinerary.startDate || "";
         $("#search").value = state.search || ""; $("#hide-done").checked = !!state.hideDone;
         toast("Imported successfully");
@@ -685,7 +811,7 @@
       ensureIds(); save();
       applyTheme(); $("#start-date").value = state.itinerary.startDate;
       $("#search").value = ""; $("#hide-done").checked = false;
-      renderFilters(); renderPacking(); refreshAll(); toast("Reset to default");
+      renderFilters(); renderPacking(); renderPlaces(); refreshAll(); toast("Reset to default");
     });
 
     // add/edit buttons (delegated)
@@ -713,9 +839,28 @@
     $("#day-form").addEventListener("submit", saveDay);
     $("#d-delete").addEventListener("click", deleteDay);
 
+    // saved places
+    renderPlaces();
+    $("#place-add").addEventListener("click", () => openPlaceModal(null));
+    $("#places-list").addEventListener("click", (e) => {
+      const add = e.target.closest("[data-place-add]");
+      if (add) {
+        const p = state.places.find(x => x.id === add.dataset.placeAdd);
+        if (p) { closeDrawer(); openModal(null, null); prefillActivityFromPlace(p); }
+        return;
+      }
+      const edit = e.target.closest("[data-place-edit]");
+      if (edit) openPlaceModal(edit.dataset.placeEdit);
+    });
+    $("#place-modal-close").addEventListener("click", closePlaceModal);
+    $("#place-modal-backdrop").addEventListener("click", (e) => { if (e.target.id === "place-modal-backdrop") closePlaceModal(); });
+    $("#place-form").addEventListener("submit", savePlace);
+    $("#p-delete").addEventListener("click", deletePlace);
+    $("#p-geocode").addEventListener("click", geocodePlace);
+
     // keyboard
     document.addEventListener("keydown", (e) => {
-      if (e.key === "Escape") { closeModal(); closeDayModal(); closeDrawer(); }
+      if (e.key === "Escape") { closeModal(); closeDayModal(); closePlaceModal(); closeDrawer(); }
     });
 
     // sync active day on scroll
