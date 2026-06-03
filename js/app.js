@@ -55,6 +55,7 @@
   }
   function save() {
     try { localStorage.setItem(STORAGE_KEY, JSON.stringify(state)); } catch {}
+    pushSync();
   }
 
   // Stable per-item ids so completion survives reordering / moving between days.
@@ -765,6 +766,96 @@
   function refreshAll() {
     renderRail(); renderItinerary(); renderStats(); renderMap();
   }
+  function rerenderEverything() {
+    refreshAll(); renderPacking(); renderPlaces();
+    $("#start-date").value = state.itinerary.startDate || "";
+  }
+
+  // ---------- Live sync (Firebase Realtime Database, optional) ----------
+  // Only the shared trip data is synced; per-user prefs (theme, rate, filters) stay local.
+  const SHARED_KEYS = ["itinerary", "done", "packing", "places"];
+  const sync = {
+    enabled: false, db: null, ref: null, tripCode: null,
+    clientId: Math.random().toString(36).slice(2),
+    applyingRemote: false, pushT: null
+  };
+  function sharedSnapshot() {
+    const o = { updatedAt: Date.now(), by: sync.clientId };
+    SHARED_KEYS.forEach(k => { o[k] = state[k]; });
+    return o;
+  }
+  function applyShared(data) {
+    SHARED_KEYS.forEach(k => { if (data[k] !== undefined) state[k] = data[k]; });
+    ensureIds();
+  }
+  function setSyncStatus(status, msg) {
+    const dot = $("#sync-dot"), txt = $("#sync-status");
+    if (dot) dot.className = "sync-dot " + status;
+    if (txt && msg) txt.textContent = msg;
+    if (dot) dot.title = msg || status;
+  }
+  function isConfigured() {
+    return typeof FIREBASE_CONFIG !== "undefined" && FIREBASE_CONFIG &&
+      FIREBASE_CONFIG.databaseURL && !/YOUR_/.test(JSON.stringify(FIREBASE_CONFIG));
+  }
+  function initSync() {
+    if (!isConfigured() || typeof firebase === "undefined") {
+      $("#sync-on").hidden = true; $("#sync-off").hidden = false;
+      setSyncStatus("local", "Local only — changes stay on this device.");
+      return;
+    }
+    $("#sync-off").hidden = true; $("#sync-on").hidden = false;
+    try {
+      if (!firebase.apps || !firebase.apps.length) firebase.initializeApp(FIREBASE_CONFIG);
+      sync.db = firebase.database();
+      const code = localStorage.getItem("trip-code") ||
+        (typeof DEFAULT_TRIP_CODE !== "undefined" ? DEFAULT_TRIP_CODE : "shared-trip");
+      $("#sync-code").value = code;
+      connectTrip(code);
+    } catch (e) {
+      console.warn("Sync init failed:", e);
+      setSyncStatus("error", "Sync error — running locally.");
+    }
+  }
+  function connectTrip(code) {
+    if (!sync.db || !code) return;
+    if (sync.ref) sync.ref.off();
+    sync.tripCode = code;
+    localStorage.setItem("trip-code", code);
+    sync.ref = sync.db.ref("trips/" + code);
+    setSyncStatus("connecting", `Connecting to “${code}”…`);
+    sync.ref.on("value", (snap) => {
+      const data = snap.val();
+      if (!data) {                       // brand-new trip code: seed it from our data
+        sync.ref.set(sharedSnapshot());
+        setSyncStatus("synced", `Synced · trip “${code}” (you started it)`);
+        return;
+      }
+      if (data.by === sync.clientId) {    // our own write echoing back
+        setSyncStatus("synced", `Synced · trip “${code}”`);
+        return;
+      }
+      sync.applyingRemote = true;
+      applyShared(data);
+      try { localStorage.setItem(STORAGE_KEY, JSON.stringify(state)); } catch {}
+      rerenderEverything();
+      sync.applyingRemote = false;
+      setSyncStatus("synced", `Synced · trip “${code}” · updated just now`);
+    }, (err) => {
+      console.warn("Sync read error:", err);
+      setSyncStatus("error", "Can't reach the database — running locally.");
+    });
+    sync.enabled = true;
+  }
+  function pushSync() {
+    if (!sync.enabled || sync.applyingRemote || !sync.ref) return;
+    clearTimeout(sync.pushT);
+    sync.pushT = setTimeout(() => {
+      sync.ref.set(sharedSnapshot())
+        .then(() => setSyncStatus("synced", `Synced · trip “${sync.tripCode}”`))
+        .catch(() => setSyncStatus("error", "Couldn't save to the cloud — kept locally."));
+    }, 500);
+  }
 
   // ---------- Init ----------
   function init() {
@@ -871,6 +962,13 @@
     $("#place-form").addEventListener("submit", savePlace);
     $("#p-delete").addEventListener("click", deletePlace);
     $("#p-geocode").addEventListener("click", geocodePlace);
+
+    // live sync
+    initSync();
+    $("#sync-connect").addEventListener("click", () => {
+      const code = $("#sync-code").value.trim();
+      if (code) { connectTrip(code); toast(`Connected to trip “${code}”`); }
+    });
 
     // keyboard
     document.addEventListener("keydown", (e) => {

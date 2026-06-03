@@ -312,6 +312,14 @@ input:focus, select:focus, textarea:focus { outline: 2px solid var(--accent); ou
 .qf-chip { cursor: pointer; }
 .qf-chip:hover { background: var(--accent); color: #fff; border-color: var(--accent); }
 
+/* Sync status */
+.sync-dot { display: inline-block; width: 9px; height: 9px; border-radius: 50%; margin-left: 4px; vertical-align: middle; }
+.sync-dot.local { background: var(--muted); }
+.sync-dot.connecting { background: #f59e0b; animation: pulse 1s infinite; }
+.sync-dot.synced { background: #22c55e; }
+.sync-dot.error { background: var(--danger); }
+@keyframes pulse { 50% { opacity: .3; } }
+
 .metro-details { margin-top: 12px; }
 .metro-details summary { cursor: pointer; font-size: 13px; color: var(--accent); }
 .metro-details .tips { margin-top: 8px; }
@@ -475,6 +483,23 @@ input:focus, select:focus, textarea:focus { outline: 2px solid var(--accent); ou
       <p class="muted small">Hardcode spots you reuse — home, hotel, a favourite café. Then drop one onto any day in a click, with the address & details pre-filled.</p>
       <div id="places-list" class="places-list"></div>
       <button id="place-add" class="btn small">＋ Add a place</button>
+    </div>
+
+    <div class="drawer-section">
+      <h3>🔄 Live sync <span id="sync-dot" class="sync-dot local" title="Local only"></span></h3>
+      <p id="sync-status" class="muted small">Local only — changes stay on this device.</p>
+      <div id="sync-on" hidden>
+        <label class="small">Trip code (everyone uses the same one)
+          <span class="addr-row">
+            <input type="text" id="sync-code" placeholder="korea-2026-itaewon" />
+            <button type="button" class="btn small" id="sync-connect">Connect</button>
+          </span>
+        </label>
+        <p class="muted small" id="sync-share">Share this app's link + trip code with your group; everyone edits the same live itinerary.</p>
+      </div>
+      <div id="sync-off">
+        <p class="muted small">Not configured yet. Add a free Firebase project's config to <code>js/firebase-config.js</code> to share one live itinerary across everyone's devices (no payment needed). Until then the app works fully, just locally.</p>
+      </div>
     </div>
 
     <div class="drawer-section">
@@ -642,6 +667,40 @@ input:focus, select:focus, textarea:focus { outline: 2px solid var(--accent); ou
 
   <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"
           integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo=" crossorigin=""></script>
+  <!-- Firebase (optional live sync). Loads from CDN; app stays local-only if unavailable. -->
+  <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-app-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-database-compat.js"></script>
+  <script>
+/* ---------------------------------------------------------------------------
+ * Firebase live-sync config  (FREE — no credit card needed)
+ *
+ * While the values below are placeholders, the app runs LOCAL-ONLY (each device
+ * keeps its own copy). Fill them in to share ONE live itinerary across everyone.
+ *
+ * Setup (~3 minutes):
+ *  1. Go to https://console.firebase.google.com  →  "Add project"  (any name,
+ *     you can disable Google Analytics).
+ *  2. In the project: "Build → Realtime Database" → "Create Database" →
+ *     pick a location → start in **test mode** (fine for a private trip; you can
+ *     tighten the rules later — see README).
+ *  3. Project settings (gear icon) → "Your apps" → Web ( </> ) → register an app.
+ *  4. Copy the shown firebaseConfig values into the object below. The important
+ *     one is **databaseURL** (looks like https://xxxx-default-rtdb.firebaseio.com).
+ *  5. Choose any hard-to-guess TRIP_CODE and share the deployed link with your
+ *     group. Everyone who opens it edits the same live itinerary.
+ * ------------------------------------------------------------------------- */
+const FIREBASE_CONFIG = {
+  apiKey: "YOUR_API_KEY",
+  authDomain: "YOUR_PROJECT.firebaseapp.com",
+  databaseURL: "https://YOUR_PROJECT-default-rtdb.firebaseio.com",
+  projectId: "YOUR_PROJECT",
+  appId: "YOUR_APP_ID"
+};
+
+// Everyone in your group must use the SAME trip code to see each other's edits.
+const DEFAULT_TRIP_CODE = "korea-2026-itaewon";
+
+</script>
   <script>
 /* Korea 8-day itinerary (Jun 12–20) — default data
  * Costs are rough per-person estimates in KRW (₩). type: sight|food|activity|transport|rest|shopping
@@ -895,6 +954,7 @@ const TRANSPORT_INFO = {
   }
   function save() {
     try { localStorage.setItem(STORAGE_KEY, JSON.stringify(state)); } catch {}
+    pushSync();
   }
 
   // Stable per-item ids so completion survives reordering / moving between days.
@@ -1605,6 +1665,96 @@ const TRANSPORT_INFO = {
   function refreshAll() {
     renderRail(); renderItinerary(); renderStats(); renderMap();
   }
+  function rerenderEverything() {
+    refreshAll(); renderPacking(); renderPlaces();
+    $("#start-date").value = state.itinerary.startDate || "";
+  }
+
+  // ---------- Live sync (Firebase Realtime Database, optional) ----------
+  // Only the shared trip data is synced; per-user prefs (theme, rate, filters) stay local.
+  const SHARED_KEYS = ["itinerary", "done", "packing", "places"];
+  const sync = {
+    enabled: false, db: null, ref: null, tripCode: null,
+    clientId: Math.random().toString(36).slice(2),
+    applyingRemote: false, pushT: null
+  };
+  function sharedSnapshot() {
+    const o = { updatedAt: Date.now(), by: sync.clientId };
+    SHARED_KEYS.forEach(k => { o[k] = state[k]; });
+    return o;
+  }
+  function applyShared(data) {
+    SHARED_KEYS.forEach(k => { if (data[k] !== undefined) state[k] = data[k]; });
+    ensureIds();
+  }
+  function setSyncStatus(status, msg) {
+    const dot = $("#sync-dot"), txt = $("#sync-status");
+    if (dot) dot.className = "sync-dot " + status;
+    if (txt && msg) txt.textContent = msg;
+    if (dot) dot.title = msg || status;
+  }
+  function isConfigured() {
+    return typeof FIREBASE_CONFIG !== "undefined" && FIREBASE_CONFIG &&
+      FIREBASE_CONFIG.databaseURL && !/YOUR_/.test(JSON.stringify(FIREBASE_CONFIG));
+  }
+  function initSync() {
+    if (!isConfigured() || typeof firebase === "undefined") {
+      $("#sync-on").hidden = true; $("#sync-off").hidden = false;
+      setSyncStatus("local", "Local only — changes stay on this device.");
+      return;
+    }
+    $("#sync-off").hidden = true; $("#sync-on").hidden = false;
+    try {
+      if (!firebase.apps || !firebase.apps.length) firebase.initializeApp(FIREBASE_CONFIG);
+      sync.db = firebase.database();
+      const code = localStorage.getItem("trip-code") ||
+        (typeof DEFAULT_TRIP_CODE !== "undefined" ? DEFAULT_TRIP_CODE : "shared-trip");
+      $("#sync-code").value = code;
+      connectTrip(code);
+    } catch (e) {
+      console.warn("Sync init failed:", e);
+      setSyncStatus("error", "Sync error — running locally.");
+    }
+  }
+  function connectTrip(code) {
+    if (!sync.db || !code) return;
+    if (sync.ref) sync.ref.off();
+    sync.tripCode = code;
+    localStorage.setItem("trip-code", code);
+    sync.ref = sync.db.ref("trips/" + code);
+    setSyncStatus("connecting", `Connecting to “${code}”…`);
+    sync.ref.on("value", (snap) => {
+      const data = snap.val();
+      if (!data) {                       // brand-new trip code: seed it from our data
+        sync.ref.set(sharedSnapshot());
+        setSyncStatus("synced", `Synced · trip “${code}” (you started it)`);
+        return;
+      }
+      if (data.by === sync.clientId) {    // our own write echoing back
+        setSyncStatus("synced", `Synced · trip “${code}”`);
+        return;
+      }
+      sync.applyingRemote = true;
+      applyShared(data);
+      try { localStorage.setItem(STORAGE_KEY, JSON.stringify(state)); } catch {}
+      rerenderEverything();
+      sync.applyingRemote = false;
+      setSyncStatus("synced", `Synced · trip “${code}” · updated just now`);
+    }, (err) => {
+      console.warn("Sync read error:", err);
+      setSyncStatus("error", "Can't reach the database — running locally.");
+    });
+    sync.enabled = true;
+  }
+  function pushSync() {
+    if (!sync.enabled || sync.applyingRemote || !sync.ref) return;
+    clearTimeout(sync.pushT);
+    sync.pushT = setTimeout(() => {
+      sync.ref.set(sharedSnapshot())
+        .then(() => setSyncStatus("synced", `Synced · trip “${sync.tripCode}”`))
+        .catch(() => setSyncStatus("error", "Couldn't save to the cloud — kept locally."));
+    }, 500);
+  }
 
   // ---------- Init ----------
   function init() {
@@ -1711,6 +1861,13 @@ const TRANSPORT_INFO = {
     $("#place-form").addEventListener("submit", savePlace);
     $("#p-delete").addEventListener("click", deletePlace);
     $("#p-geocode").addEventListener("click", geocodePlace);
+
+    // live sync
+    initSync();
+    $("#sync-connect").addEventListener("click", () => {
+      const code = $("#sync-code").value.trim();
+      if (code) { connectTrip(code); toast(`Connected to trip “${code}”`); }
+    });
 
     // keyboard
     document.addEventListener("keydown", (e) => {
