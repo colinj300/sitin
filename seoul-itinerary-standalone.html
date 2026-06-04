@@ -377,31 +377,128 @@ details.adv .form-grid { margin-top: 8px; }
   font-weight: 700; font-size: 12px; border: 2px solid #fff; box-shadow: 0 1px 4px rgba(0,0,0,.4);
 }
 
+/* Directions action sheet */
+.sheet {
+  position: fixed; z-index: 2001; left: 50%; top: 50%; transform: translate(-50%, -50%);
+  width: 360px; max-width: 94vw; background: var(--surface);
+  border-radius: var(--radius); box-shadow: var(--shadow); padding: 18px;
+  display: flex; flex-direction: column; gap: 8px;
+}
+.sheet-handle { display: none; }
+.sheet h3 { font-size: 16px; }
+.sheet > .muted { margin-bottom: 4px; }
+.dir-opt {
+  display: flex; flex-direction: column; gap: 1px; text-decoration: none; color: var(--text);
+  border: 1px solid var(--border); border-radius: 12px; padding: 13px 14px;
+}
+.dir-opt b { font-size: 14px; font-weight: 600; }
+.dir-opt span { font-size: 11.5px; color: var(--muted); }
+.dir-opt:hover, .dir-opt:active { background: var(--accent-soft); border-color: var(--accent); }
+.sheet .btn { margin-top: 4px; min-height: 44px; }
+.dir-btn { font-weight: 600; }
+
+/* Mobile bottom navigation (hidden on desktop) */
+.mobile-nav { display: none; }
+
 /* Responsive */
 @media (max-width: 1100px) {
   .layout { grid-template-columns: 160px 1fr; height: auto; }
   .map-pane { grid-column: 1 / -1; height: 380px; border-left: none; border-top: 1px solid var(--border); }
   .itinerary, .day-rail { height: auto; max-height: 70vh; }
 }
-@media (max-width: 680px) {
-  .layout { display: block; }
-  .day-rail {
-    display: flex; gap: 6px; overflow-x: auto; height: auto; border-right: none;
-    border-bottom: 1px solid var(--border); position: sticky; top: 120px; z-index: 30;
-  }
-  .day-rail button { width: auto; white-space: nowrap; }
-  .itinerary { max-height: none; }
-  .map-pane { height: 320px; }
-  .summary { gap: 16px; }
-  .summary-num { font-size: 18px; }
-  .item { grid-template-columns: 22px 48px 1fr; }
-  .item-right { grid-column: 2 / -1; text-align: left; }
+
+@media (max-width: 760px) {
+  /* Layout becomes single-column, view toggled by the bottom nav */
+  .layout { display: block; height: auto; }
+  .itinerary { height: auto; max-height: none; padding: 14px 12px 96px; }
+  .map-pane { display: none; height: 320px; }
+
+  /* Compact header */
+  .topbar { padding: 10px 14px; gap: 8px; }
+  .topbar h1 { font-size: 18px; }
+  .subtitle { display: none; }
   .trip-meta { display: none; }
+
+  /* Summary: horizontal scroll strip */
+  .summary { gap: 18px; padding: 10px 14px; overflow-x: auto; flex-wrap: nowrap; }
+  .summary-item { flex: 0 0 auto; }
+  .summary-num { font-size: 17px; }
+  .progress-wrap { display: none; }
+
+  /* Controls */
+  .controls { top: 0; padding: 10px 12px; gap: 8px; }
+  #search { min-width: 100%; order: -1; padding: 11px 12px; }
+  #add-activity-btn, #add-day-btn { flex: 1; min-height: 42px; }
+
+  /* Day rail as a sticky horizontal strip */
+  .day-rail {
+    display: flex; gap: 6px; overflow-x: auto; height: auto; padding: 8px 12px;
+    border-right: none; border-bottom: 1px solid var(--border);
+    position: sticky; top: 0; z-index: 30; -webkit-overflow-scrolling: touch;
+  }
+  .day-rail button { width: auto; white-space: nowrap; padding: 8px 12px; min-height: 40px; }
+
+  /* Roomier, thumb-friendly activity rows */
+  .item { grid-template-columns: 26px 1fr; gap: 8px 10px; padding: 14px 14px; }
+  .item-time { grid-column: 2; font-size: 12px; }
+  .item-body { grid-column: 2; }
+  .item-right { grid-column: 2; text-align: left; margin-top: 2px; }
+  .item-check { width: 24px; height: 24px; }
+  .item-name { font-size: 15.5px; }
+  .item-notes { font-size: 13px; }
+  .item-links { gap: 8px; margin-top: 8px; }
+  .item-links a, .item-links button {
+    font-size: 13px; padding: 8px 12px; border: 1px solid var(--border);
+    border-radius: 9px; background: var(--surface); min-height: 38px; display: inline-flex; align-items: center;
+  }
+  .item-links .dir-btn { background: var(--accent-soft); border-color: var(--accent); color: var(--accent); }
+
+  /* Full-screen modals with sticky save bar */
+  .modal {
+    width: 100vw; max-width: 100vw; height: 100dvh; max-height: 100dvh;
+    top: 0; left: 0; transform: none; border-radius: 0;
+  }
+  .modal .drawer-head { position: sticky; top: 0; z-index: 3; }
+  #activity-form, #day-form, #place-form { padding-bottom: 14px; }
+  .modal form .btn-row.end {
+    position: sticky; bottom: 0; background: var(--surface); margin: 16px -18px 0;
+    padding: 12px 18px calc(12px + env(safe-area-inset-bottom)); border-top: 1px solid var(--border);
+  }
+  .modal form .btn-row.end .btn { flex: 1; min-height: 46px; }
+
+  /* Drawer full-width */
+  .drawer { width: 100vw; max-width: 100vw; }
+
+  /* Bottom sheet for directions */
+  .sheet {
+    top: auto; bottom: 0; left: 0; transform: none; width: 100vw; max-width: 100vw;
+    border-radius: 18px 18px 0 0; padding-bottom: calc(18px + env(safe-area-inset-bottom));
+  }
+  .sheet-handle { display: block; width: 40px; height: 4px; border-radius: 2px; background: var(--border); margin: 0 auto 8px; }
+  .dir-opt { padding: 15px 14px; }
+
+  /* Bottom nav */
+  .mobile-nav {
+    display: flex; position: fixed; left: 0; right: 0; bottom: 0; z-index: 1500;
+    background: var(--surface); border-top: 1px solid var(--border);
+    padding: 4px 0 calc(4px + env(safe-area-inset-bottom));
+  }
+  .mobile-nav button {
+    flex: 1; background: none; border: none; color: var(--muted);
+    display: flex; flex-direction: column; align-items: center; gap: 2px;
+    font-size: 11px; padding: 6px 0; min-height: 50px;
+  }
+  .mobile-nav button .mn-ico { font-size: 20px; line-height: 1; }
+  .mobile-nav button.active { color: var(--accent); }
+
+  /* Map view: hide the plan, show a big map */
+  body.view-map .summary, body.view-map .controls, body.view-map .itinerary { display: none; }
+  body.view-map .map-pane { display: block; height: calc(100dvh - 160px); border: none; }
 }
 
 /* Print */
 @media print {
-  .topbar-actions, .controls, .day-rail, .map-pane, .add-item-btn, .item-check { display: none !important; }
+  .topbar-actions, .controls, .day-rail, .map-pane, .add-item-btn, .item-check, .mobile-nav { display: none !important; }
   .layout { display: block; height: auto; }
   .itinerary { height: auto; overflow: visible; }
   body { background: #fff; }
@@ -670,6 +767,26 @@ details.adv .form-grid { margin-top: 8px; }
       </form>
     </div>
   </div>
+
+  <!-- Directions action sheet -->
+  <div class="modal-backdrop" id="dir-backdrop" hidden>
+    <div class="sheet" role="dialog" aria-modal="true" aria-labelledby="dir-title">
+      <div class="sheet-handle"></div>
+      <h3 id="dir-title">Directions</h3>
+      <p class="muted small" id="dir-sub">Opens your map app with transit directions to this stop.</p>
+      <a class="dir-opt" id="dir-kakao" target="_blank" rel="noopener"><b>🟡 KakaoMap</b><span>best for Korea subway & bus</span></a>
+      <a class="dir-opt" id="dir-naver" target="_blank" rel="noopener"><b>🟢 Naver Map</b><span>great transit · English support</span></a>
+      <a class="dir-opt" id="dir-google" target="_blank" rel="noopener"><b>🔵 Google Maps</b><span>familiar · walking & driving</span></a>
+      <button class="btn" id="dir-close">Cancel</button>
+    </div>
+  </div>
+
+  <!-- Mobile bottom navigation -->
+  <nav class="mobile-nav" id="mobile-nav" aria-label="View switcher">
+    <button data-view="list" class="active"><span class="mn-ico">📋</span><span>Plan</span></button>
+    <button data-view="map"><span class="mn-ico">🗺️</span><span>Map</span></button>
+    <button data-view="tools"><span class="mn-ico">⚙️</span><span>Tools</span></button>
+  </nav>
 
   <div id="toast" class="toast" hidden></div>
 
@@ -1051,7 +1168,36 @@ const TRANSPORT_INFO = {
     if (pts.length) map.fitBounds(pts, { padding: [50, 50], maxZoom: 15 });
   }
   function flyTo(coords) {
-    if (map && coords) { map.flyTo(coords, 16, { duration: .6 }); }
+    if (map && coords) {
+      setMobileView("map");           // on phones, jump to the map view
+      setTimeout(() => map.flyTo(coords, 16, { duration: .6 }), 60);
+    }
+  }
+
+  // ---------- Directions (deep-links to native map apps; free, no API key) ----------
+  function openDirections(name, coords) {
+    if (!Array.isArray(coords) || coords.length !== 2) return;
+    const [lat, lng] = coords;
+    const n = encodeURIComponent(name || "Destination");
+    const host = location.host || "korea-itinerary";
+    $("#dir-title").textContent = name || "Directions";
+    $("#dir-kakao").href = `https://map.kakao.com/link/to/${n},${lat},${lng}`;
+    // Naver: app deep-link (transit) — works on phones with the Naver Map app installed
+    $("#dir-naver").href = `nmap://route/public?dlat=${lat}&dlng=${lng}&dname=${n}&appname=${host}`;
+    $("#dir-google").href = `https://www.google.com/maps/dir/?api=1&destination=${lat},${lng}&travelmode=transit`;
+    $("#dir-backdrop").hidden = false;
+  }
+  function closeDirections() { $("#dir-backdrop").hidden = true; }
+
+  // ---------- Mobile view switching (Plan / Map) ----------
+  function setMobileView(view) {
+    if (!window.matchMedia || !window.matchMedia("(max-width: 760px)").matches) return;
+    const map_ = view === "map";
+    document.body.classList.toggle("view-map", map_);
+    document.body.classList.toggle("view-list", !map_);
+    $("#mobile-nav button[data-view]").forEach(b =>
+      b.classList.toggle("active", b.dataset.view === (map_ ? "map" : "list")));
+    if (map_ && map) setTimeout(() => { map.invalidateSize(); renderMap(); }, 80);
   }
 
   // ---------- Render itinerary ----------
@@ -1143,8 +1289,8 @@ const TRANSPORT_INFO = {
         </div>
         ${it.notes ? `<div class="item-notes">${escapeHtml(it.notes)}</div>` : ""}
         <div class="item-links">
-          ${hasCoords ? `<button data-focus="${di}-${ii}">📍 Show on map</button>` : ""}
-          ${hasCoords ? `<a href="https://www.openstreetmap.org/?mlat=${it.coords[0]}&mlon=${it.coords[1]}#map=16/${it.coords[0]}/${it.coords[1]}" target="_blank" rel="noopener">🗺 Open map</a>` : ""}
+          ${hasCoords ? `<button class="dir-btn" data-dir="${ii}">🧭 Directions</button>` : ""}
+          ${hasCoords ? `<button data-focus="${di}-${ii}">📍 Map</button>` : ""}
           ${it.url ? `<a href="${escapeAttr(it.url)}" target="_blank" rel="noopener">🔗 Website</a>` : ""}
           <button data-edit="${di}-${ii}">✏️ Edit</button>
         </div>
@@ -1165,6 +1311,8 @@ const TRANSPORT_INFO = {
     });
     const focusBtn = $("[data-focus]", li);
     if (focusBtn) focusBtn.addEventListener("click", (e) => { e.stopPropagation(); flyTo(it.coords); });
+    const dirBtn = $("[data-dir]", li);
+    if (dirBtn) dirBtn.addEventListener("click", (e) => { e.stopPropagation(); openDirections(it.name, it.coords); });
     $("[data-edit]", li).addEventListener("click", (e) => { e.stopPropagation(); openModal(di, ii); });
     return li;
   }
@@ -1935,6 +2083,26 @@ const TRANSPORT_INFO = {
       const code = $("#sync-code").value.trim();
       if (code) { connectTrip(code); toast(`Connected to trip “${code}”`); }
     });
+
+    // directions sheet
+    $("#dir-close").addEventListener("click", closeDirections);
+    $("#dir-backdrop").addEventListener("click", (e) => { if (e.target.id === "dir-backdrop") closeDirections(); });
+    $("#dir-backdrop .dir-opt").forEach(a => a.addEventListener("click", () => setTimeout(closeDirections, 100)));
+
+    // mobile bottom nav
+    $("#mobile-nav button[data-view]").forEach(btn => {
+      btn.addEventListener("click", () => {
+        const v = btn.dataset.view;
+        if (v === "tools") { openDrawer(); return; }
+        // force-apply even though setMobileView guards on width (nav is mobile-only anyway)
+        const map_ = v === "map";
+        document.body.classList.toggle("view-map", map_);
+        document.body.classList.toggle("view-list", !map_);
+        $("#mobile-nav button[data-view]").forEach(b => b.classList.toggle("active", b.dataset.view === v));
+        if (map_ && map) setTimeout(() => { map.invalidateSize(); renderMap(); }, 80);
+      });
+    });
+    document.body.classList.add("view-list");
 
     // keyboard
     document.addEventListener("keydown", (e) => {

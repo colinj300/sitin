@@ -366,31 +366,128 @@ details.adv .form-grid { margin-top: 8px; }
   font-weight: 700; font-size: 12px; border: 2px solid #fff; box-shadow: 0 1px 4px rgba(0,0,0,.4);
 }
 
+/* Directions action sheet */
+.sheet {
+  position: fixed; z-index: 2001; left: 50%; top: 50%; transform: translate(-50%, -50%);
+  width: 360px; max-width: 94vw; background: var(--surface);
+  border-radius: var(--radius); box-shadow: var(--shadow); padding: 18px;
+  display: flex; flex-direction: column; gap: 8px;
+}
+.sheet-handle { display: none; }
+.sheet h3 { font-size: 16px; }
+.sheet > .muted { margin-bottom: 4px; }
+.dir-opt {
+  display: flex; flex-direction: column; gap: 1px; text-decoration: none; color: var(--text);
+  border: 1px solid var(--border); border-radius: 12px; padding: 13px 14px;
+}
+.dir-opt b { font-size: 14px; font-weight: 600; }
+.dir-opt span { font-size: 11.5px; color: var(--muted); }
+.dir-opt:hover, .dir-opt:active { background: var(--accent-soft); border-color: var(--accent); }
+.sheet .btn { margin-top: 4px; min-height: 44px; }
+.dir-btn { font-weight: 600; }
+
+/* Mobile bottom navigation (hidden on desktop) */
+.mobile-nav { display: none; }
+
 /* Responsive */
 @media (max-width: 1100px) {
   .layout { grid-template-columns: 160px 1fr; height: auto; }
   .map-pane { grid-column: 1 / -1; height: 380px; border-left: none; border-top: 1px solid var(--border); }
   .itinerary, .day-rail { height: auto; max-height: 70vh; }
 }
-@media (max-width: 680px) {
-  .layout { display: block; }
-  .day-rail {
-    display: flex; gap: 6px; overflow-x: auto; height: auto; border-right: none;
-    border-bottom: 1px solid var(--border); position: sticky; top: 120px; z-index: 30;
-  }
-  .day-rail button { width: auto; white-space: nowrap; }
-  .itinerary { max-height: none; }
-  .map-pane { height: 320px; }
-  .summary { gap: 16px; }
-  .summary-num { font-size: 18px; }
-  .item { grid-template-columns: 22px 48px 1fr; }
-  .item-right { grid-column: 2 / -1; text-align: left; }
+
+@media (max-width: 760px) {
+  /* Layout becomes single-column, view toggled by the bottom nav */
+  .layout { display: block; height: auto; }
+  .itinerary { height: auto; max-height: none; padding: 14px 12px 96px; }
+  .map-pane { display: none; height: 320px; }
+
+  /* Compact header */
+  .topbar { padding: 10px 14px; gap: 8px; }
+  .topbar h1 { font-size: 18px; }
+  .subtitle { display: none; }
   .trip-meta { display: none; }
+
+  /* Summary: horizontal scroll strip */
+  .summary { gap: 18px; padding: 10px 14px; overflow-x: auto; flex-wrap: nowrap; }
+  .summary-item { flex: 0 0 auto; }
+  .summary-num { font-size: 17px; }
+  .progress-wrap { display: none; }
+
+  /* Controls */
+  .controls { top: 0; padding: 10px 12px; gap: 8px; }
+  #search { min-width: 100%; order: -1; padding: 11px 12px; }
+  #add-activity-btn, #add-day-btn { flex: 1; min-height: 42px; }
+
+  /* Day rail as a sticky horizontal strip */
+  .day-rail {
+    display: flex; gap: 6px; overflow-x: auto; height: auto; padding: 8px 12px;
+    border-right: none; border-bottom: 1px solid var(--border);
+    position: sticky; top: 0; z-index: 30; -webkit-overflow-scrolling: touch;
+  }
+  .day-rail button { width: auto; white-space: nowrap; padding: 8px 12px; min-height: 40px; }
+
+  /* Roomier, thumb-friendly activity rows */
+  .item { grid-template-columns: 26px 1fr; gap: 8px 10px; padding: 14px 14px; }
+  .item-time { grid-column: 2; font-size: 12px; }
+  .item-body { grid-column: 2; }
+  .item-right { grid-column: 2; text-align: left; margin-top: 2px; }
+  .item-check { width: 24px; height: 24px; }
+  .item-name { font-size: 15.5px; }
+  .item-notes { font-size: 13px; }
+  .item-links { gap: 8px; margin-top: 8px; }
+  .item-links a, .item-links button {
+    font-size: 13px; padding: 8px 12px; border: 1px solid var(--border);
+    border-radius: 9px; background: var(--surface); min-height: 38px; display: inline-flex; align-items: center;
+  }
+  .item-links .dir-btn { background: var(--accent-soft); border-color: var(--accent); color: var(--accent); }
+
+  /* Full-screen modals with sticky save bar */
+  .modal {
+    width: 100vw; max-width: 100vw; height: 100dvh; max-height: 100dvh;
+    top: 0; left: 0; transform: none; border-radius: 0;
+  }
+  .modal .drawer-head { position: sticky; top: 0; z-index: 3; }
+  #activity-form, #day-form, #place-form { padding-bottom: 14px; }
+  .modal form .btn-row.end {
+    position: sticky; bottom: 0; background: var(--surface); margin: 16px -18px 0;
+    padding: 12px 18px calc(12px + env(safe-area-inset-bottom)); border-top: 1px solid var(--border);
+  }
+  .modal form .btn-row.end .btn { flex: 1; min-height: 46px; }
+
+  /* Drawer full-width */
+  .drawer { width: 100vw; max-width: 100vw; }
+
+  /* Bottom sheet for directions */
+  .sheet {
+    top: auto; bottom: 0; left: 0; transform: none; width: 100vw; max-width: 100vw;
+    border-radius: 18px 18px 0 0; padding-bottom: calc(18px + env(safe-area-inset-bottom));
+  }
+  .sheet-handle { display: block; width: 40px; height: 4px; border-radius: 2px; background: var(--border); margin: 0 auto 8px; }
+  .dir-opt { padding: 15px 14px; }
+
+  /* Bottom nav */
+  .mobile-nav {
+    display: flex; position: fixed; left: 0; right: 0; bottom: 0; z-index: 1500;
+    background: var(--surface); border-top: 1px solid var(--border);
+    padding: 4px 0 calc(4px + env(safe-area-inset-bottom));
+  }
+  .mobile-nav button {
+    flex: 1; background: none; border: none; color: var(--muted);
+    display: flex; flex-direction: column; align-items: center; gap: 2px;
+    font-size: 11px; padding: 6px 0; min-height: 50px;
+  }
+  .mobile-nav button .mn-ico { font-size: 20px; line-height: 1; }
+  .mobile-nav button.active { color: var(--accent); }
+
+  /* Map view: hide the plan, show a big map */
+  body.view-map .summary, body.view-map .controls, body.view-map .itinerary { display: none; }
+  body.view-map .map-pane { display: block; height: calc(100dvh - 160px); border: none; }
 }
 
 /* Print */
 @media print {
-  .topbar-actions, .controls, .day-rail, .map-pane, .add-item-btn, .item-check { display: none !important; }
+  .topbar-actions, .controls, .day-rail, .map-pane, .add-item-btn, .item-check, .mobile-nav { display: none !important; }
   .layout { display: block; height: auto; }
   .itinerary { height: auto; overflow: visible; }
   body { background: #fff; }

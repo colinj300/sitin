@@ -141,7 +141,36 @@
     if (pts.length) map.fitBounds(pts, { padding: [50, 50], maxZoom: 15 });
   }
   function flyTo(coords) {
-    if (map && coords) { map.flyTo(coords, 16, { duration: .6 }); }
+    if (map && coords) {
+      setMobileView("map");           // on phones, jump to the map view
+      setTimeout(() => map.flyTo(coords, 16, { duration: .6 }), 60);
+    }
+  }
+
+  // ---------- Directions (deep-links to native map apps; free, no API key) ----------
+  function openDirections(name, coords) {
+    if (!Array.isArray(coords) || coords.length !== 2) return;
+    const [lat, lng] = coords;
+    const n = encodeURIComponent(name || "Destination");
+    const host = location.host || "korea-itinerary";
+    $("#dir-title").textContent = name || "Directions";
+    $("#dir-kakao").href = `https://map.kakao.com/link/to/${n},${lat},${lng}`;
+    // Naver: app deep-link (transit) — works on phones with the Naver Map app installed
+    $("#dir-naver").href = `nmap://route/public?dlat=${lat}&dlng=${lng}&dname=${n}&appname=${host}`;
+    $("#dir-google").href = `https://www.google.com/maps/dir/?api=1&destination=${lat},${lng}&travelmode=transit`;
+    $("#dir-backdrop").hidden = false;
+  }
+  function closeDirections() { $("#dir-backdrop").hidden = true; }
+
+  // ---------- Mobile view switching (Plan / Map) ----------
+  function setMobileView(view) {
+    if (!window.matchMedia || !window.matchMedia("(max-width: 760px)").matches) return;
+    const map_ = view === "map";
+    document.body.classList.toggle("view-map", map_);
+    document.body.classList.toggle("view-list", !map_);
+    $$("#mobile-nav button[data-view]").forEach(b =>
+      b.classList.toggle("active", b.dataset.view === (map_ ? "map" : "list")));
+    if (map_ && map) setTimeout(() => { map.invalidateSize(); renderMap(); }, 80);
   }
 
   // ---------- Render itinerary ----------
@@ -233,8 +262,8 @@
         </div>
         ${it.notes ? `<div class="item-notes">${escapeHtml(it.notes)}</div>` : ""}
         <div class="item-links">
-          ${hasCoords ? `<button data-focus="${di}-${ii}">📍 Show on map</button>` : ""}
-          ${hasCoords ? `<a href="https://www.openstreetmap.org/?mlat=${it.coords[0]}&mlon=${it.coords[1]}#map=16/${it.coords[0]}/${it.coords[1]}" target="_blank" rel="noopener">🗺 Open map</a>` : ""}
+          ${hasCoords ? `<button class="dir-btn" data-dir="${ii}">🧭 Directions</button>` : ""}
+          ${hasCoords ? `<button data-focus="${di}-${ii}">📍 Map</button>` : ""}
           ${it.url ? `<a href="${escapeAttr(it.url)}" target="_blank" rel="noopener">🔗 Website</a>` : ""}
           <button data-edit="${di}-${ii}">✏️ Edit</button>
         </div>
@@ -255,6 +284,8 @@
     });
     const focusBtn = $("[data-focus]", li);
     if (focusBtn) focusBtn.addEventListener("click", (e) => { e.stopPropagation(); flyTo(it.coords); });
+    const dirBtn = $("[data-dir]", li);
+    if (dirBtn) dirBtn.addEventListener("click", (e) => { e.stopPropagation(); openDirections(it.name, it.coords); });
     $("[data-edit]", li).addEventListener("click", (e) => { e.stopPropagation(); openModal(di, ii); });
     return li;
   }
@@ -1025,6 +1056,26 @@
       const code = $("#sync-code").value.trim();
       if (code) { connectTrip(code); toast(`Connected to trip “${code}”`); }
     });
+
+    // directions sheet
+    $("#dir-close").addEventListener("click", closeDirections);
+    $("#dir-backdrop").addEventListener("click", (e) => { if (e.target.id === "dir-backdrop") closeDirections(); });
+    $$("#dir-backdrop .dir-opt").forEach(a => a.addEventListener("click", () => setTimeout(closeDirections, 100)));
+
+    // mobile bottom nav
+    $$("#mobile-nav button[data-view]").forEach(btn => {
+      btn.addEventListener("click", () => {
+        const v = btn.dataset.view;
+        if (v === "tools") { openDrawer(); return; }
+        // force-apply even though setMobileView guards on width (nav is mobile-only anyway)
+        const map_ = v === "map";
+        document.body.classList.toggle("view-map", map_);
+        document.body.classList.toggle("view-list", !map_);
+        $$("#mobile-nav button[data-view]").forEach(b => b.classList.toggle("active", b.dataset.view === v));
+        if (map_ && map) setTimeout(() => { map.invalidateSize(); renderMap(); }, 80);
+      });
+    });
+    document.body.classList.add("view-list");
 
     // keyboard
     document.addEventListener("keydown", (e) => {

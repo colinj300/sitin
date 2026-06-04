@@ -8,7 +8,7 @@
   <!-- Leaflet (free, OpenStreetMap — no API key needed) -->
   <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"
         integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY=" crossorigin="" />
-  <link rel="stylesheet" href="css/styles.css?v=11" />
+  <link rel="stylesheet" href="css/styles.css?v=12" />
   <link rel="preconnect" href="https://tile.openstreetmap.org" />
 </head>
 <body>
@@ -271,6 +271,26 @@
     </div>
   </div>
 
+  <!-- Directions action sheet -->
+  <div class="modal-backdrop" id="dir-backdrop" hidden>
+    <div class="sheet" role="dialog" aria-modal="true" aria-labelledby="dir-title">
+      <div class="sheet-handle"></div>
+      <h3 id="dir-title">Directions</h3>
+      <p class="muted small" id="dir-sub">Opens your map app with transit directions to this stop.</p>
+      <a class="dir-opt" id="dir-kakao" target="_blank" rel="noopener"><b>🟡 KakaoMap</b><span>best for Korea subway & bus</span></a>
+      <a class="dir-opt" id="dir-naver" target="_blank" rel="noopener"><b>🟢 Naver Map</b><span>great transit · English support</span></a>
+      <a class="dir-opt" id="dir-google" target="_blank" rel="noopener"><b>🔵 Google Maps</b><span>familiar · walking & driving</span></a>
+      <button class="btn" id="dir-close">Cancel</button>
+    </div>
+  </div>
+
+  <!-- Mobile bottom navigation -->
+  <nav class="mobile-nav" id="mobile-nav" aria-label="View switcher">
+    <button data-view="list" class="active"><span class="mn-ico">📋</span><span>Plan</span></button>
+    <button data-view="map"><span class="mn-ico">🗺️</span><span>Map</span></button>
+    <button data-view="tools"><span class="mn-ico">⚙️</span><span>Tools</span></button>
+  </nav>
+
   <div id="toast" class="toast" hidden></div>
 
   <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"
@@ -278,8 +298,8 @@
   <!-- Firebase (optional live sync). Loads from CDN; app stays local-only if unavailable. -->
   <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-app-compat.js"></script>
   <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-database-compat.js"></script>
-  <script src="js/firebase-config.js?v=11"></script>
-  <script src="js/data.js?v=11"></script>
-  <script src="js/app.js?v=11"></script>
+  <script src="js/firebase-config.js?v=12"></script>
+  <script src="js/data.js?v=12"></script>
+  <script src="js/app.js?v=12"></script>
 </body>
 </html>
