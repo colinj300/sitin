@@ -560,6 +560,19 @@
     setTimeout(() => $("#d-title").focus(), 50);
   }
   function closeDayModal() { $("#day-modal-backdrop").hidden = true; }
+  // Reorder days chronologically by their effective date (explicit day.date, else
+  // derived from startDate + current position). Returns the day object order changed.
+  function dayKey(day, idx) {
+    if (day.date) return day.date;
+    if (state.itinerary.startDate) return addDaysISO(state.itinerary.startDate, idx);
+    return "9999-" + String(idx).padStart(3, "0");  // no dates set → keep original order
+  }
+  function sortDaysByDate() {
+    state.itinerary.days = state.itinerary.days
+      .map((day, i) => ({ day, k: dayKey(day, i), i }))
+      .sort((a, b) => a.k.localeCompare(b.k) || (a.i - b.i))
+      .map(o => o.day);
+  }
   function saveDay(e) {
     e.preventDefault();
     const title = $("#d-title").value.trim();
@@ -572,14 +585,18 @@
       transport: $("#d-transport").value.trim() || undefined,
       date: $("#d-date").value || undefined
     };
+    let edited;
     if (idxRaw === "") {
-      state.itinerary.days.push(Object.assign(data, { items: [] }));
-      state.activeDay = state.itinerary.days.length - 1;
+      edited = Object.assign(data, { items: [] });
+      state.itinerary.days.push(edited);
       toast("Day added");
     } else {
-      Object.assign(state.itinerary.days[+idxRaw], data);
+      edited = state.itinerary.days[+idxRaw];
+      Object.assign(edited, data);
       toast("Day updated");
     }
+    sortDaysByDate();                                   // reorder by date
+    state.activeDay = state.itinerary.days.indexOf(edited);
     save(); closeDayModal(); refreshAll();
   }
   function deleteDay() {
@@ -812,7 +829,7 @@
         const data = JSON.parse(reader.result);
         if (!data.itinerary || !Array.isArray(data.itinerary.days)) throw new Error("bad file");
         Object.assign(state, freshState(), data);
-        ensureIds(); migrateDone(); normalizeOrder();
+        ensureIds(); migrateDone(); sortDaysByDate(); normalizeOrder();
         save(); applyTheme(); renderFilters(); refreshAll(); renderPacking(); renderPlaces();
         $("#start-date").value = state.itinerary.startDate || "";
         $("#search").value = state.search || ""; $("#hide-done").checked = !!state.hideDone;
@@ -858,7 +875,7 @@
   }
   function applyShared(data) {
     SHARED_KEYS.forEach(k => { if (data[k] !== undefined) state[k] = data[k]; });
-    ensureIds(); normalizeOrder();
+    ensureIds(); sortDaysByDate(); normalizeOrder();
   }
   function setSyncStatus(status, msg) {
     const dot = $("#sync-dot"), txt = $("#sync-status");
@@ -946,7 +963,7 @@
 
   // ---------- Init ----------
   function init() {
-    ensureIds(); migrateDone(); normalizeOrder(); save();
+    ensureIds(); migrateDone(); sortDaysByDate(); normalizeOrder(); save();
     applyTheme();
     initMap();
     buildTypeSelect();
