@@ -397,6 +397,9 @@ details.adv .form-grid { margin-top: 8px; }
 .sheet .btn { margin-top: 4px; min-height: 44px; }
 .dir-btn { font-weight: 600; }
 
+/* Ideas & notes */
+.notes-area { width: 100%; resize: vertical; min-height: 120px; line-height: 1.5; font-size: 13.5px; }
+
 /* Mobile bottom navigation (hidden on desktop) */
 .mobile-nav { display: none; }
 
@@ -589,6 +592,12 @@ details.adv .form-grid { margin-top: 8px; }
       <p class="muted small">Hardcode spots you reuse — home, hotel, a favourite café. Then drop one onto any day in a click, with the address & details pre-filled.</p>
       <div id="places-list" class="places-list"></div>
       <button id="place-add" class="btn small">＋ Add a place</button>
+    </div>
+
+    <div class="drawer-section">
+      <h3>📝 Ideas &amp; notes</h3>
+      <p class="muted small">Jot down places you're considering, restaurants to try, anything. Shared & synced with everyone.</p>
+      <textarea id="notes-area" class="notes-area" rows="8" placeholder="e.g.&#10;- Maybe a cat café in Hongdae?&#10;- Someone recommended Nudake dessert&#10;- Check if the night market is open Saturday"></textarea>
     </div>
 
     <div class="drawer-section">
@@ -1042,6 +1051,7 @@ const TRANSPORT_INFO = {
       done: {},            // item id -> true
       packing: defaultPacking(),
       places: defaultPlaces(),
+      notes: "",
       theme: "light",
       activeFilters: [],   // type filter; empty = all
       search: "",
@@ -1883,13 +1893,18 @@ const TRANSPORT_INFO = {
     renderRail(); renderItinerary(); renderStats(); renderMap();
   }
   function rerenderEverything() {
-    refreshAll(); renderPacking(); renderPlaces();
+    refreshAll(); renderPacking(); renderPlaces(); renderNotes();
     $("#start-date").value = state.itinerary.startDate || "";
+  }
+  function renderNotes() {
+    const ta = $("#notes-area");
+    if (!ta || document.activeElement === ta) return;  // don't clobber while typing
+    ta.value = state.notes || "";
   }
 
   // ---------- Live sync (Firebase Realtime Database, optional) ----------
   // Only the shared trip data is synced; per-user prefs (theme, rate, filters) stay local.
-  const SHARED_KEYS = ["itinerary", "done", "packing", "places"];
+  const SHARED_KEYS = ["itinerary", "done", "packing", "places", "notes"];
   const sync = {
     enabled: false, db: null, ref: null, tripCode: null,
     clientId: Math.random().toString(36).slice(2),
@@ -2035,6 +2050,10 @@ const TRANSPORT_INFO = {
     $("#packing-add").addEventListener("click", addPacking);
     $("#packing-input").addEventListener("keydown", (e) => { if (e.key === "Enter") addPacking(); });
 
+    // ideas & notes (shared + synced)
+    renderNotes();
+    $("#notes-area").addEventListener("input", (e) => { state.notes = e.target.value; save(); });
+
     // data buttons
     $("#export-btn").addEventListener("click", exportData);
     $("#print-btn").addEventListener("click", () => window.print());
@@ -2047,7 +2066,7 @@ const TRANSPORT_INFO = {
       ensureIds(); save();
       applyTheme(); $("#start-date").value = state.itinerary.startDate;
       $("#search").value = ""; $("#hide-done").checked = false;
-      renderFilters(); renderPacking(); renderPlaces(); refreshAll(); toast("Reset to default");
+      renderFilters(); renderPacking(); renderPlaces(); renderNotes(); refreshAll(); toast("Reset to default");
     });
 
     // add/edit buttons (delegated)

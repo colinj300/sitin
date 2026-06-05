@@ -386,6 +386,9 @@ details.adv .form-grid { margin-top: 8px; }
 .sheet .btn { margin-top: 4px; min-height: 44px; }
 .dir-btn { font-weight: 600; }
 
+/* Ideas & notes */
+.notes-area { width: 100%; resize: vertical; min-height: 120px; line-height: 1.5; font-size: 13.5px; }
+
 /* Mobile bottom navigation (hidden on desktop) */
 .mobile-nav { display: none; }
 

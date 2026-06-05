@@ -15,6 +15,7 @@
       done: {},            // item id -> true
       packing: defaultPacking(),
       places: defaultPlaces(),
+      notes: "",
       theme: "light",
       activeFilters: [],   // type filter; empty = all
       search: "",
@@ -856,13 +857,18 @@
     renderRail(); renderItinerary(); renderStats(); renderMap();
   }
   function rerenderEverything() {
-    refreshAll(); renderPacking(); renderPlaces();
+    refreshAll(); renderPacking(); renderPlaces(); renderNotes();
     $("#start-date").value = state.itinerary.startDate || "";
+  }
+  function renderNotes() {
+    const ta = $("#notes-area");
+    if (!ta || document.activeElement === ta) return;  // don't clobber while typing
+    ta.value = state.notes || "";
   }
 
   // ---------- Live sync (Firebase Realtime Database, optional) ----------
   // Only the shared trip data is synced; per-user prefs (theme, rate, filters) stay local.
-  const SHARED_KEYS = ["itinerary", "done", "packing", "places"];
+  const SHARED_KEYS = ["itinerary", "done", "packing", "places", "notes"];
   const sync = {
     enabled: false, db: null, ref: null, tripCode: null,
     clientId: Math.random().toString(36).slice(2),
@@ -1008,6 +1014,10 @@
     $("#packing-add").addEventListener("click", addPacking);
     $("#packing-input").addEventListener("keydown", (e) => { if (e.key === "Enter") addPacking(); });
 
+    // ideas & notes (shared + synced)
+    renderNotes();
+    $("#notes-area").addEventListener("input", (e) => { state.notes = e.target.value; save(); });
+
     // data buttons
     $("#export-btn").addEventListener("click", exportData);
     $("#print-btn").addEventListener("click", () => window.print());
@@ -1020,7 +1030,7 @@
       ensureIds(); save();
       applyTheme(); $("#start-date").value = state.itinerary.startDate;
       $("#search").value = ""; $("#hide-done").checked = false;
-      renderFilters(); renderPacking(); renderPlaces(); refreshAll(); toast("Reset to default");
+      renderFilters(); renderPacking(); renderPlaces(); renderNotes(); refreshAll(); toast("Reset to default");
     });
 
     // add/edit buttons (delegated)
