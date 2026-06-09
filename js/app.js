@@ -81,6 +81,7 @@
     (ex.settlements || (ex.settlements = [])).forEach(s => { if (!s.id) s.id = uid(); });
     if (!ex.rates) ex.rates = defaultExpenses().rates;
     if (!ex.baseCurrency) ex.baseCurrency = "KRW";
+    repairRates();
     ex.rates[ex.baseCurrency] = 1;
   }
   // Migrate legacy "dayIndex-itemIndex" completion keys to id-based keys (one-time).
@@ -995,6 +996,29 @@
     ["groceries", "🛒", "Groceries"], ["entertainment", "🎉", "Entertainment"], ["other", "•", "Other"]
   ];
   const catMeta = id => EXP_CATEGORIES.find(c => c[0] === id) || EXP_CATEGORIES[0];
+  // Canonical reference rates expressed in KRW (value of 1 unit). Used to rebuild/repair
+  // the rate table relative to whatever base currency is chosen.
+  const CANON_RATES = { KRW: 1, USD: 1370, EUR: 1480, GBP: 1740, JPY: 9, AUD: 910, CAD: 1000, CNY: 190, THB: 38, SGD: 1010, HKD: 175, NZD: 830, CHF: 1530 };
+  // Rebuild the rate table relative to `base` from canonical KRW values.
+  function ratesForBase(base) {
+    const div = CANON_RATES[base] || 1;
+    const out = {};
+    Object.keys(CANON_RATES).forEach(c => { out[c] = CANON_RATES[c] / div; });
+    out[base] = 1;
+    return out;
+  }
+  // One-time repair: if the base isn't KRW but KRW still reads 1 (leftover KRW-anchored
+  // defaults from before a base switch), the table is inconsistent — rebuild it.
+  function repairRates() {
+    const ex = state.expenses;
+    const b = ex.baseCurrency;
+    if (b && b !== "KRW" && CANON_RATES[b] && Math.abs((ex.rates && ex.rates.KRW != null ? ex.rates.KRW : 1) - 1) < 1e-9) {
+      const fixed = ratesForBase(b);
+      // keep any custom currencies the user added that aren't in CANON
+      Object.keys(ex.rates || {}).forEach(c => { if (fixed[c] == null) fixed[c] = ex.rates[c]; });
+      ex.rates = fixed;
+    }
+  }
   const curSymbol = c => CUR_SYMBOLS[c] || (c + " ");
   const curDec = c => (c === "KRW" || c === "JPY") ? 0 : 2;
   const baseCur = () => state.expenses.baseCurrency;
@@ -1553,10 +1577,22 @@
     $("#rates-modal-close").addEventListener("click", () => $("#rates-modal-backdrop").hidden = true);
     $("#rates-modal-backdrop").addEventListener("click", e => { if (e.target.id === "rates-modal-backdrop") $("#rates-modal-backdrop").hidden = true; });
     $("#base-currency-select").addEventListener("change", e => {
-      state.expenses.baseCurrency = e.target.value; state.expenses.rates[e.target.value] = 1;
+      const ex = state.expenses, nb = e.target.value, div = ex.rates[nb];
+      if (div > 0 && isFinite(div)) {
+        // re-express every rate relative to the new base
+        Object.keys(ex.rates).forEach(c => { ex.rates[c] = ex.rates[c] / div; });
+      } else {
+        ex.rates = ratesForBase(nb);
+      }
+      ex.baseCurrency = nb; ex.rates[nb] = 1;
       save(); renderRatesList(); renderExpenses();
     });
     $("#rate-add").addEventListener("click", addCurrency);
+    $("#rate-reset").addEventListener("click", () => {
+      if (!confirm("Reset all exchange rates to default values (relative to your base currency)?")) return;
+      state.expenses.rates = ratesForBase(state.expenses.baseCurrency);
+      save(); renderRatesList(); renderExpenses(); toast("Rates reset to defaults");
+    });
 
     // expense modal
     $("#exp-modal-close").addEventListener("click", closeExpense);
