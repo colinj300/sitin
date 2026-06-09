@@ -16,12 +16,22 @@
       packing: defaultPacking(),
       places: defaultPlaces(),
       notes: "",
+      expenses: defaultExpenses(),
       theme: "light",
       activeFilters: [],   // type filter; empty = all
       search: "",
       hideDone: false,
       rate: 1370,
       activeDay: 0
+    };
+  }
+  function defaultExpenses() {
+    return {
+      members: [],                 // {id, name}
+      baseCurrency: "KRW",
+      rates: { KRW: 1, USD: 1370, EUR: 1480, GBP: 1740, JPY: 9, AUD: 910, CAD: 1000 },
+      list: [],                    // {id, desc, amount, currency, date, category, paidBy:{mid:amt}, split:{type, among:[mid], values:{mid:n}}}
+      settlements: []              // {id, from, to, amount(baseMinor), date, note}
     };
   }
   function defaultPlaces() {
@@ -64,6 +74,14 @@
   function ensureIds() {
     state.itinerary.days.forEach(day => day.items.forEach(it => { if (!it.id) it.id = uid(); }));
     (state.places || (state.places = [])).forEach(p => { if (!p.id) p.id = uid(); });
+    if (!state.expenses) state.expenses = defaultExpenses();
+    const ex = state.expenses;
+    (ex.members || (ex.members = [])).forEach(m => { if (!m.id) m.id = uid(); });
+    (ex.list || (ex.list = [])).forEach(e => { if (!e.id) e.id = uid(); });
+    (ex.settlements || (ex.settlements = [])).forEach(s => { if (!s.id) s.id = uid(); });
+    if (!ex.rates) ex.rates = defaultExpenses().rates;
+    if (!ex.baseCurrency) ex.baseCurrency = "KRW";
+    ex.rates[ex.baseCurrency] = 1;
   }
   // Migrate legacy "dayIndex-itemIndex" completion keys to id-based keys (one-time).
   function migrateDone() {
@@ -857,7 +875,7 @@
     renderRail(); renderItinerary(); renderStats(); renderMap();
   }
   function rerenderEverything() {
-    refreshAll(); renderPacking(); renderPlaces(); renderNotes();
+    refreshAll(); renderPacking(); renderPlaces(); renderNotes(); renderExpenses();
     $("#start-date").value = state.itinerary.startDate || "";
   }
   function renderNotes() {
@@ -868,7 +886,7 @@
 
   // ---------- Live sync (Firebase Realtime Database, optional) ----------
   // Only the shared trip data is synced; per-user prefs (theme, rate, filters) stay local.
-  const SHARED_KEYS = ["itinerary", "done", "packing", "places", "notes"];
+  const SHARED_KEYS = ["itinerary", "done", "packing", "places", "notes", "expenses"];
   const sync = {
     enabled: false, db: null, ref: null, tripCode: null,
     clientId: Math.random().toString(36).slice(2),
@@ -965,6 +983,417 @@
         .then(() => setSyncStatus("synced", `Synced · trip “${sync.tripCode}”`))
         .catch((err) => setSyncStatus("error", "Couldn't save to the cloud (" + ((err && (err.code || err.message)) || "denied") + ") — kept locally."));
     }, 500);
+  }
+
+  // ===================================================================
+  //  EXPENSES  (Splitwise-style splitting, multi-currency, Firebase-synced)
+  // ===================================================================
+  const CUR_SYMBOLS = { KRW: "₩", USD: "$", EUR: "€", GBP: "£", JPY: "¥", AUD: "A$", CAD: "C$", CNY: "¥", THB: "฿", SGD: "S$", HKD: "HK$", NZD: "NZ$", CHF: "CHF " };
+  const EXP_CATEGORIES = [
+    ["general", "🧾", "General"], ["food", "🍽️", "Food & drink"], ["transport", "🚗", "Transport"],
+    ["lodging", "🏨", "Lodging"], ["activity", "🎟️", "Activities"], ["shopping", "🛍️", "Shopping"],
+    ["groceries", "🛒", "Groceries"], ["entertainment", "🎉", "Entertainment"], ["other", "•", "Other"]
+  ];
+  const catMeta = id => EXP_CATEGORIES.find(c => c[0] === id) || EXP_CATEGORIES[0];
+  const curSymbol = c => CUR_SYMBOLS[c] || (c + " ");
+  const curDec = c => (c === "KRW" || c === "JPY") ? 0 : 2;
+  const baseCur = () => state.expenses.baseCurrency;
+  const baseDec = () => curDec(baseCur());
+  const baseUnit = () => Math.pow(10, baseDec());
+  const memberById = id => state.expenses.members.find(m => m.id === id);
+  const memberName = id => (memberById(id) || {}).name || "—";
+  function toBaseMinor(amount, currency) {
+    const r = state.expenses.rates[currency] != null ? state.expenses.rates[currency] : 1;
+    return Math.round((Number(amount) || 0) * r * baseUnit());
+  }
+  function baseToMinor(amount) { return Math.round((Number(amount) || 0) * baseUnit()); }
+  function fmtBaseMinor(minor) {
+    const v = (minor || 0) / baseUnit();
+    return curSymbol(baseCur()) + v.toLocaleString(undefined, { minimumFractionDigits: baseDec(), maximumFractionDigits: baseDec() });
+  }
+  function fmtCur(amount, currency) {
+    const d = curDec(currency);
+    return curSymbol(currency) + (Number(amount) || 0).toLocaleString(undefined, { minimumFractionDigits: d, maximumFractionDigits: d });
+  }
+  // Largest-remainder distribution of an integer total over weights.
+  function distribute(total, weights) {
+    const sum = weights.reduce((a, b) => a + b, 0);
+    if (sum <= 0) return weights.map(() => 0);
+    const raw = weights.map(w => total * w / sum);
+    const floor = raw.map(Math.floor);
+    let rem = total - floor.reduce((a, b) => a + b, 0);
+    const order = raw.map((r, i) => ({ i, f: r - Math.floor(r) })).sort((a, b) => b.f - a.f);
+    for (let k = 0; k < rem; k++) floor[order[k % order.length].i]++;
+    return floor;
+  }
+  function expensePaid(e) {
+    const paid = {};
+    Object.entries(e.paidBy || {}).forEach(([mid, amt]) => { paid[mid] = toBaseMinor(amt, e.currency); });
+    return paid;
+  }
+  function expenseOwed(e) {
+    const members = state.expenses.members.map(m => m.id);
+    let among = (e.split && e.split.among && e.split.among.length) ? e.split.among : members;
+    among = among.filter(id => members.includes(id));
+    if (!among.length) return {};
+    const type = (e.split && e.split.type) || "equal";
+    const vals = (e.split && e.split.values) || {};
+    const total = toBaseMinor(e.amount, e.currency);
+    if (type === "exact") {
+      const owed = {}; among.forEach(id => { owed[id] = toBaseMinor(vals[id], e.currency); });
+      return owed;
+    }
+    let weights = among.map(id => type === "equal" ? 1 : (Number(vals[id]) || 0));
+    if (weights.reduce((a, b) => a + b, 0) === 0) weights = among.map(() => 1);
+    const dist = distribute(total, weights);
+    const owed = {}; among.forEach((id, i) => { owed[id] = dist[i]; });
+    return owed;
+  }
+  function computeBalances() {
+    const bal = {}; state.expenses.members.forEach(m => bal[m.id] = 0);
+    state.expenses.list.forEach(e => {
+      Object.entries(expensePaid(e)).forEach(([id, v]) => { if (bal[id] != null) bal[id] += v; });
+      Object.entries(expenseOwed(e)).forEach(([id, v]) => { if (bal[id] != null) bal[id] -= v; });
+    });
+    (state.expenses.settlements || []).forEach(s => {
+      if (bal[s.from] != null) bal[s.from] += s.amount;
+      if (bal[s.to] != null) bal[s.to] -= s.amount;
+    });
+    return bal;
+  }
+  function simplifyDebts(bal) {
+    const cred = [], deb = [];
+    Object.entries(bal).forEach(([id, v]) => { if (v > 0) cred.push({ id, v }); else if (v < 0) deb.push({ id, v: -v }); });
+    cred.sort((a, b) => b.v - a.v); deb.sort((a, b) => b.v - a.v);
+    const tx = []; let i = 0, j = 0;
+    while (i < deb.length && j < cred.length) {
+      const pay = Math.min(deb[i].v, cred[j].v);
+      if (pay > 0) tx.push({ from: deb[i].id, to: cred[j].id, amount: pay });
+      deb[i].v -= pay; cred[j].v -= pay;
+      if (deb[i].v === 0) i++;
+      if (cred[j].v === 0) j++;
+    }
+    return tx;
+  }
+
+  // ---------- Expenses rendering ----------
+  function renderExpenses() {
+    const view = $("#expenses-view");
+    if (!view) return;
+    const ex = state.expenses;
+    const hasMembers = ex.members.length > 0;
+    $("#exp-empty").innerHTML = hasMembers ? "" :
+      `<div class="exp-card"><p class="muted">👋 Add the people on your trip to start splitting expenses.</p>
+       <button class="btn primary small" id="exp-empty-add">👥 Add people</button></div>`;
+    const grid = $(".exp-grid");
+    if (!hasMembers) {
+      grid.style.display = "none";
+      const b = $("#exp-empty-add"); if (b) b.onclick = openPeople;
+      return;
+    }
+    grid.style.display = "";
+
+    const totalMinor = ex.list.reduce((s, e) => s + toBaseMinor(e.amount, e.currency), 0);
+    const perHead = ex.members.length ? Math.round(totalMinor / ex.members.length) : 0;
+    $("#exp-summary").innerHTML =
+      `<div class="exp-stat"><span class="exp-stat-num">${fmtBaseMinor(totalMinor)}</span><span class="exp-stat-lbl">Total spent</span></div>
+       <div class="exp-stat"><span class="exp-stat-num">${ex.list.length}</span><span class="exp-stat-lbl">Expenses</span></div>
+       <div class="exp-stat"><span class="exp-stat-num">${fmtBaseMinor(perHead)}</span><span class="exp-stat-lbl">Avg / person</span></div>
+       <div class="exp-stat"><span class="exp-stat-num">${ex.members.length}</span><span class="exp-stat-lbl">People</span></div>`;
+
+    const bal = computeBalances();
+    $("#exp-balances").innerHTML = ex.members.map(m => {
+      const v = bal[m.id] || 0;
+      const cls = v > 0 ? "pos" : (v < 0 ? "neg" : "zero");
+      const label = v > 0 ? "gets back" : (v < 0 ? "owes" : "settled");
+      return `<div class="bal-row"><span class="bal-name">${escapeHtml(m.name)}</span>
+        <span class="bal-amt ${cls}">${v === 0 ? "✓ settled" : label + " " + fmtBaseMinor(Math.abs(v))}</span></div>`;
+    }).join("");
+
+    const tx = simplifyDebts(bal);
+    $("#exp-settle-list").innerHTML = tx.length
+      ? tx.map(t => `<div class="settle-row">
+          <span><b>${escapeHtml(memberName(t.from))}</b> → <b>${escapeHtml(memberName(t.to))}</b></span>
+          <span class="settle-amt">${fmtBaseMinor(t.amount)}</span>
+          <button class="btn small settle-go" data-from="${t.from}" data-to="${t.to}" data-amt="${t.amount}">Settle</button>
+        </div>`).join("")
+      : `<p class="muted small">All settled up 🎉</p>`;
+    $$(".settle-go").forEach(b => b.onclick = () =>
+      openSettle({ from: b.dataset.from, to: b.dataset.to, amount: (+b.dataset.amt) / baseUnit() }));
+
+    // History: expenses + settlements, newest first by date
+    const rows = [];
+    ex.list.forEach(e => rows.push({ kind: "exp", date: e.date || "", e }));
+    (ex.settlements || []).forEach(s => rows.push({ kind: "settle", date: s.date || "", s }));
+    rows.sort((a, b) => (b.date || "").localeCompare(a.date || ""));
+    $("#exp-list").innerHTML = rows.length ? rows.map(r => {
+      if (r.kind === "settle") {
+        const s = r.s;
+        return `<div class="exp-item settle-item" data-settle="${s.id}">
+          <div class="exp-ico">💸</div>
+          <div class="exp-item-body"><div class="exp-item-name">${escapeHtml(memberName(s.from))} paid ${escapeHtml(memberName(s.to))}</div>
+          <div class="exp-item-sub">${r.date || ""}${s.note ? " · " + escapeHtml(s.note) : ""}</div></div>
+          <div class="exp-item-amt">${fmtBaseMinor(s.amount)}</div></div>`;
+      }
+      const e = r.e, cm = catMeta(e.category);
+      const payers = Object.keys(e.paidBy || {});
+      const paidLabel = payers.length === 1 ? memberName(payers[0]) : payers.length + " people";
+      const splitType = (e.split && e.split.type) || "equal";
+      const baseM = toBaseMinor(e.amount, e.currency);
+      const baseNote = e.currency !== baseCur() ? ` · ${fmtBaseMinor(baseM)}` : "";
+      return `<div class="exp-item" data-exp="${e.id}">
+        <div class="exp-ico" title="${cm[2]}">${cm[1]}</div>
+        <div class="exp-item-body">
+          <div class="exp-item-name">${escapeHtml(e.desc || "(no description)")}</div>
+          <div class="exp-item-sub">${escapeHtml(paidLabel)} paid · split ${splitType}${e.date ? " · " + e.date : ""}</div>
+        </div>
+        <div class="exp-item-amt">${fmtCur(e.amount, e.currency)}<span class="exp-item-base">${baseNote}</span></div>
+      </div>`;
+    }).join("") : `<p class="muted small">No expenses yet. Tap “Add expense”.</p>`;
+    $$("#exp-list [data-exp]").forEach(el => el.onclick = () => openExpense(el.dataset.exp));
+    $$("#exp-list [data-settle]").forEach(el => el.onclick = () => {
+      if (confirm("Delete this settlement?")) {
+        ex.settlements = ex.settlements.filter(s => s.id !== el.dataset.settle);
+        save(); renderExpenses();
+      }
+    });
+  }
+
+  // ---------- People modal ----------
+  function openPeople() {
+    renderPeopleList();
+    $("#people-modal-backdrop").hidden = false;
+    setTimeout(() => $("#person-input").focus(), 50);
+  }
+  function renderPeopleList() {
+    const root = $("#people-list");
+    root.innerHTML = state.expenses.members.length
+      ? state.expenses.members.map(m => `<div class="person-row"><span>${escapeHtml(m.name)}</span>
+          <button class="icon-mini" data-rm="${m.id}" title="Remove">🗑</button></div>`).join("")
+      : `<p class="muted small">No one yet.</p>`;
+    $$("#people-list [data-rm]").forEach(b => b.onclick = () => {
+      const id = b.dataset.rm;
+      const used = state.expenses.list.some(e => (e.paidBy && e.paidBy[id]) || (e.split && e.split.among && e.split.among.includes(id)))
+        || (state.expenses.settlements || []).some(s => s.from === id || s.to === id);
+      if (used && !confirm("This person appears in existing expenses. Remove anyway? Those expenses keep their data but the person won't be counted.")) return;
+      state.expenses.members = state.expenses.members.filter(m => m.id !== id);
+      save(); renderPeopleList(); renderExpenses();
+    });
+  }
+  function addPerson() {
+    const v = $("#person-input").value.trim();
+    if (!v) return;
+    state.expenses.members.push({ id: uid(), name: v });
+    $("#person-input").value = "";
+    save(); renderPeopleList(); renderExpenses();
+  }
+
+  // ---------- Currencies / rates modal ----------
+  function openRates() {
+    const sel = $("#base-currency-select");
+    sel.innerHTML = Object.keys(state.expenses.rates).sort().map(c => `<option value="${c}">${c}</option>`).join("");
+    sel.value = baseCur();
+    renderRatesList();
+    $("#rates-modal-backdrop").hidden = false;
+  }
+  function renderRatesList() {
+    const ex = state.expenses;
+    $("#rates-list").innerHTML = Object.keys(ex.rates).sort().map(c => {
+      const isBase = c === ex.baseCurrency;
+      return `<div class="rate-row">
+        <span class="rate-code">${c}${isBase ? " <span class='muted'>(base)</span>" : ""}</span>
+        <span class="rate-eq">1 ${c} =</span>
+        <input type="number" step="any" min="0" class="rate-input" data-c="${c}" value="${ex.rates[c]}" ${isBase ? "disabled" : ""}/>
+        <span class="rate-base">${escapeHtml(ex.baseCurrency)}</span>
+        ${isBase ? "" : `<button class="icon-mini" data-rmcur="${c}" title="Remove">🗑</button>`}
+      </div>`;
+    }).join("");
+    $$("#rates-list .rate-input").forEach(inp => inp.onchange = () => {
+      ex.rates[inp.dataset.c] = Number(inp.value) || 0; save(); renderExpenses();
+    });
+    $$("#rates-list [data-rmcur]").forEach(b => b.onclick = () => {
+      delete ex.rates[b.dataset.rmcur]; save(); renderRatesList(); renderExpenses();
+    });
+  }
+  function addCurrency() {
+    const code = $("#rate-code").value.trim().toUpperCase();
+    const val = Number($("#rate-val").value);
+    if (!code || !(val > 0)) { toast("Enter a currency code and rate"); return; }
+    state.expenses.rates[code] = val;
+    $("#rate-code").value = ""; $("#rate-val").value = "";
+    save(); renderRatesList(); renderExpenses();
+  }
+
+  // ---------- Expense modal ----------
+  function fillSelect(sel, options, selected) {
+    sel.innerHTML = options.map(([v, label]) => `<option value="${v}" ${v === selected ? "selected" : ""}>${label}</option>`).join("");
+  }
+  function openExpense(id) {
+    const ex = state.expenses;
+    if (!ex.members.length) { openPeople(); return; }
+    const editing = !!id;
+    const e = editing ? ex.list.find(x => x.id === id) : null;
+    $("#ex-id").value = id || "";
+    $("#exp-modal-title").textContent = editing ? "Edit expense" : "Add expense";
+    $("#ex-delete").hidden = !editing;
+    $("#ex-desc").value = e ? e.desc : "";
+    $("#ex-amount").value = e ? e.amount : "";
+    fillSelect($("#ex-currency"), Object.keys(ex.rates).sort().map(c => [c, c]), e ? e.currency : baseCur());
+    $("#ex-date").value = (e && e.date) || todayISO();
+    fillSelect($("#ex-category"), EXP_CATEGORIES.map(c => [c[0], `${c[1]} ${c[2]}`]), e ? e.category : "general");
+    // payer single-select default
+    fillSelect($("#ex-paid"), ex.members.map(m => [m.id, m.name]),
+      e && Object.keys(e.paidBy || {}).length === 1 ? Object.keys(e.paidBy)[0] : (ex.members[0] && ex.members[0].id));
+    // multiple payers
+    const multi = e && Object.keys(e.paidBy || {}).length > 1;
+    $("#ex-multi").checked = !!multi;
+    buildPayers(e ? e.paidBy : null);
+    togglePayers();
+    // split
+    const split = e && e.split ? e.split : { type: "equal", among: ex.members.map(m => m.id), values: {} };
+    fillSelect($("#ex-method"), [["equal", "Equally"], ["exact", "Exact amounts"], ["percent", "Percentages"], ["shares", "Shares"]], split.type || "equal");
+    buildAmong(split.among && split.among.length ? split.among : ex.members.map(m => m.id));
+    window._exSplitValues = Object.assign({}, split.values || {});
+    updateSplitInputs();
+    $("#exp-modal-backdrop").hidden = false;
+    setTimeout(() => $("#ex-desc").focus(), 50);
+  }
+  function buildPayers(paidBy) {
+    $("#ex-payers").innerHTML = state.expenses.members.map(m =>
+      `<label class="split-row"><span>${escapeHtml(m.name)}</span>
+        <input type="number" step="any" min="0" class="ex-payer" data-mid="${m.id}" value="${paidBy && paidBy[m.id] != null ? paidBy[m.id] : ""}" placeholder="0"/>
+        <span class="unit" id="payer-unit-${m.id}"></span></label>`).join("");
+    updatePayerUnits();
+  }
+  function updatePayerUnits() {
+    const sym = curSymbol($("#ex-currency").value);
+    $$("#ex-payers .unit").forEach(u => u.textContent = sym);
+  }
+  function togglePayers() {
+    const multi = $("#ex-multi").checked;
+    $("#ex-payers-wrap").hidden = !multi;
+    $("#ex-paid-wrap").hidden = multi;
+  }
+  function buildAmong(selectedIds) {
+    $("#ex-among").innerHTML = state.expenses.members.map(m =>
+      `<label class="chk"><input type="checkbox" class="ex-among-cb" value="${m.id}" ${selectedIds.includes(m.id) ? "checked" : ""}/> ${escapeHtml(m.name)}</label>`).join("");
+    $$(".ex-among-cb").forEach(cb => cb.addEventListener("change", updateSplitInputs));
+  }
+  function selectedAmong() { return $$(".ex-among-cb").filter(cb => cb.checked).map(cb => cb.value); }
+  function updateSplitInputs() {
+    const method = $("#ex-method").value;
+    const among = selectedAmong();
+    const wrap = $("#ex-splitvals");
+    if (method === "equal") {
+      wrap.innerHTML = `<p class="muted small">Split equally between ${among.length} ${among.length === 1 ? "person" : "people"}.</p>`;
+      $("#ex-split-hint").textContent = "";
+      return;
+    }
+    const unit = method === "percent" ? "%" : (method === "shares" ? "shares" : curSymbol($("#ex-currency").value));
+    const sv = window._exSplitValues || {};
+    wrap.innerHTML = among.map(id => `<label class="split-row"><span>${escapeHtml(memberName(id))}</span>
+      <input type="number" step="any" min="0" class="ex-splitval" data-mid="${id}" value="${sv[id] != null ? sv[id] : ""}" placeholder="0"/>
+      <span class="unit">${unit}</span></label>`).join("");
+    $$(".ex-splitval").forEach(inp => inp.addEventListener("input", updateSplitHint));
+    updateSplitHint();
+  }
+  function updateSplitHint() {
+    const method = $("#ex-method").value;
+    const hint = $("#ex-split-hint");
+    const vals = $$(".ex-splitval").map(i => Number(i.value) || 0);
+    const sum = vals.reduce((a, b) => a + b, 0);
+    if (method === "percent") {
+      hint.textContent = `Total ${sum}% / 100%` + (Math.abs(sum - 100) > 0.01 ? " — must equal 100%" : " ✓");
+      hint.className = "split-hint " + (Math.abs(sum - 100) < 0.01 ? "ok" : "warn");
+    } else if (method === "exact") {
+      const amt = Number($("#ex-amount").value) || 0;
+      hint.textContent = `Allocated ${fmtCur(sum, $("#ex-currency").value)} / ${fmtCur(amt, $("#ex-currency").value)}` + (Math.abs(sum - amt) > 0.001 ? " — must match" : " ✓");
+      hint.className = "split-hint " + (Math.abs(sum - amt) < 0.001 ? "ok" : "warn");
+    } else if (method === "shares") {
+      hint.textContent = `${sum} shares total`;
+      hint.className = "split-hint";
+    }
+  }
+  function closeExpense() { $("#exp-modal-backdrop").hidden = true; }
+  function saveExpense(ev) {
+    ev.preventDefault();
+    const ex = state.expenses;
+    const desc = $("#ex-desc").value.trim();
+    const amount = Number($("#ex-amount").value);
+    const currency = $("#ex-currency").value;
+    if (!(amount > 0)) { toast("Enter an amount"); return; }
+    // payers
+    let paidBy = {};
+    if ($("#ex-multi").checked) {
+      $$("#ex-payers .ex-payer").forEach(inp => { const v = Number(inp.value); if (v > 0) paidBy[inp.dataset.mid] = v; });
+      const sum = Object.values(paidBy).reduce((a, b) => a + b, 0);
+      if (Math.abs(sum - amount) > 0.001) { toast(`Payers must total ${fmtCur(amount, currency)}`); return; }
+    } else {
+      paidBy[$("#ex-paid").value] = amount;
+    }
+    if (!Object.keys(paidBy).length) { toast("Who paid?"); return; }
+    const among = selectedAmong();
+    if (!among.length) { toast("Select who's splitting"); return; }
+    const method = $("#ex-method").value;
+    const values = {};
+    if (method !== "equal") $$(".ex-splitval").forEach(inp => { values[inp.dataset.mid] = Number(inp.value) || 0; });
+    if (method === "percent") {
+      const s = Object.values(values).reduce((a, b) => a + b, 0);
+      if (Math.abs(s - 100) > 0.01) { toast("Percentages must add up to 100%"); return; }
+    }
+    if (method === "exact") {
+      const s = Object.values(values).reduce((a, b) => a + b, 0);
+      if (Math.abs(s - amount) > 0.001) { toast(`Exact amounts must total ${fmtCur(amount, currency)}`); return; }
+    }
+    const data = {
+      desc, amount, currency, date: $("#ex-date").value || todayISO(),
+      category: $("#ex-category").value, paidBy, split: { type: method, among, values }
+    };
+    const id = $("#ex-id").value;
+    if (id) { Object.assign(ex.list.find(x => x.id === id), data); toast("Expense updated"); }
+    else { ex.list.push(Object.assign({ id: uid() }, data)); toast("Expense added"); }
+    save(); closeExpense(); renderExpenses();
+  }
+  function deleteExpense() {
+    const id = $("#ex-id").value;
+    if (!id || !confirm("Delete this expense?")) return;
+    state.expenses.list = state.expenses.list.filter(x => x.id !== id);
+    save(); closeExpense(); renderExpenses(); toast("Deleted");
+  }
+
+  // ---------- Settle-up modal ----------
+  function openSettle(pre) {
+    const ex = state.expenses;
+    fillSelect($("#st-from"), ex.members.map(m => [m.id, m.name]), pre && pre.from);
+    fillSelect($("#st-to"), ex.members.map(m => [m.id, m.name]), pre && pre.to);
+    $("#st-amount").value = pre && pre.amount != null ? (pre.amount).toFixed(baseDec()) : "";
+    $("#st-currency-lbl").textContent = baseCur();
+    $("#st-date").value = todayISO();
+    $("#st-note").value = "";
+    $("#settle-modal-backdrop").hidden = false;
+  }
+  function saveSettle(ev) {
+    ev.preventDefault();
+    const from = $("#st-from").value, to = $("#st-to").value;
+    const amt = Number($("#st-amount").value);
+    if (from === to) { toast("Pick two different people"); return; }
+    if (!(amt > 0)) { toast("Enter an amount"); return; }
+    state.expenses.settlements.push({ id: uid(), from, to, amount: baseToMinor(amt), date: $("#st-date").value || todayISO(), note: $("#st-note").value.trim() });
+    save(); $("#settle-modal-backdrop").hidden = true; renderExpenses(); toast("Payment recorded");
+  }
+
+  function todayISO() { return new Date().toISOString().slice(0, 10); }
+
+  // ---------- Tab switching ----------
+  function setTab(tab) {
+    const exp = tab === "expenses";
+    document.body.classList.toggle("tab-expenses", exp);
+    $$("#tabbar button[data-tab]").forEach(b => b.classList.toggle("active", b.dataset.tab === tab));
+    $$("#mobile-nav button[data-view]").forEach(b => {
+      if (b.dataset.view === "split") b.classList.toggle("active", exp);
+    });
+    if (exp) renderExpenses();
+    else if (map) setTimeout(() => map.invalidateSize(), 60);
   }
 
   // ---------- Init ----------
@@ -1094,7 +1523,8 @@
       btn.addEventListener("click", () => {
         const v = btn.dataset.view;
         if (v === "tools") { openDrawer(); return; }
-        // force-apply even though setMobileView guards on width (nav is mobile-only anyway)
+        if (v === "split") { setTab("expenses"); $$("#mobile-nav button[data-view]").forEach(b => b.classList.toggle("active", b.dataset.view === "split")); return; }
+        setTab("trip");
         const map_ = v === "map";
         document.body.classList.toggle("view-map", map_);
         document.body.classList.toggle("view-list", !map_);
@@ -1104,9 +1534,54 @@
     });
     document.body.classList.add("view-list");
 
+    // tabs (Itinerary / Expenses)
+    $$("#tabbar button[data-tab]").forEach(b => b.addEventListener("click", () => setTab(b.dataset.tab)));
+
+    // expenses view buttons
+    $("#exp-add").addEventListener("click", () => openExpense(null));
+    $("#exp-people").addEventListener("click", openPeople);
+    $("#exp-rates").addEventListener("click", openRates);
+    $("#exp-settle").addEventListener("click", () => openSettle(null));
+
+    // people modal
+    $("#people-modal-close").addEventListener("click", () => $("#people-modal-backdrop").hidden = true);
+    $("#people-modal-backdrop").addEventListener("click", e => { if (e.target.id === "people-modal-backdrop") $("#people-modal-backdrop").hidden = true; });
+    $("#person-add").addEventListener("click", addPerson);
+    $("#person-input").addEventListener("keydown", e => { if (e.key === "Enter") addPerson(); });
+
+    // rates modal
+    $("#rates-modal-close").addEventListener("click", () => $("#rates-modal-backdrop").hidden = true);
+    $("#rates-modal-backdrop").addEventListener("click", e => { if (e.target.id === "rates-modal-backdrop") $("#rates-modal-backdrop").hidden = true; });
+    $("#base-currency-select").addEventListener("change", e => {
+      state.expenses.baseCurrency = e.target.value; state.expenses.rates[e.target.value] = 1;
+      save(); renderRatesList(); renderExpenses();
+    });
+    $("#rate-add").addEventListener("click", addCurrency);
+
+    // expense modal
+    $("#exp-modal-close").addEventListener("click", closeExpense);
+    $("#exp-modal-backdrop").addEventListener("click", e => { if (e.target.id === "exp-modal-backdrop") closeExpense(); });
+    $("#exp-form").addEventListener("submit", saveExpense);
+    $("#ex-delete").addEventListener("click", deleteExpense);
+    $("#ex-method").addEventListener("change", updateSplitInputs);
+    $("#ex-multi").addEventListener("change", togglePayers);
+    $("#ex-currency").addEventListener("change", () => { updatePayerUnits(); updateSplitInputs(); });
+    $("#ex-amount").addEventListener("input", () => { if ($("#ex-method").value === "exact") updateSplitHint(); });
+
+    // settle modal
+    $("#settle-modal-close").addEventListener("click", () => $("#settle-modal-backdrop").hidden = true);
+    $("#settle-modal-backdrop").addEventListener("click", e => { if (e.target.id === "settle-modal-backdrop") $("#settle-modal-backdrop").hidden = true; });
+    $("#settle-form").addEventListener("submit", saveSettle);
+
+    renderExpenses();
+
     // keyboard
     document.addEventListener("keydown", (e) => {
-      if (e.key === "Escape") { closeModal(); closeDayModal(); closePlaceModal(); closeDrawer(); }
+      if (e.key === "Escape") {
+        closeModal(); closeDayModal(); closePlaceModal(); closeDrawer();
+        closeExpense();
+        ["people-modal-backdrop", "rates-modal-backdrop", "settle-modal-backdrop"].forEach(id => $("#" + id).hidden = true);
+      }
     });
 
     // sync active day on scroll

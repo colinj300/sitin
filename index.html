@@ -8,7 +8,7 @@
   <!-- Leaflet (free, OpenStreetMap — no API key needed) -->
   <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"
         integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY=" crossorigin="" />
-  <link rel="stylesheet" href="css/styles.css?v=14" />
+  <link rel="stylesheet" href="css/styles.css?v=15" />
   <link rel="preconnect" href="https://tile.openstreetmap.org" />
 </head>
 <body>
@@ -30,6 +30,12 @@
       <button id="menu-btn" class="icon-btn" title="Tools" aria-label="Open tools">⚙️</button>
     </div>
   </header>
+
+  <!-- Tab bar (desktop) -->
+  <nav class="tabbar" id="tabbar" aria-label="Section tabs">
+    <button data-tab="trip" class="active">🗺 Itinerary</button>
+    <button data-tab="expenses">💸 Expenses</button>
+  </nav>
 
   <!-- Progress + summary bar -->
   <section class="summary">
@@ -78,6 +84,32 @@
       <div class="map-legend" id="map-legend"></div>
     </aside>
   </main>
+
+  <!-- Expenses view -->
+  <section id="expenses-view" class="expenses-view">
+    <div class="exp-head">
+      <h2>💸 Split Expenses</h2>
+      <div class="exp-head-actions">
+        <button id="exp-people" class="btn small">👥 People</button>
+        <button id="exp-rates" class="btn small">💱 Currencies</button>
+        <button id="exp-add" class="btn primary small">＋ Add expense</button>
+      </div>
+    </div>
+    <div class="exp-empty" id="exp-empty"></div>
+    <div class="exp-grid">
+      <div class="exp-col">
+        <div class="exp-card"><h3>Summary</h3><div id="exp-summary" class="exp-summary"></div></div>
+        <div class="exp-card"><h3>Balances</h3><div id="exp-balances"></div></div>
+        <div class="exp-card">
+          <div class="exp-card-head"><h3>Settle up</h3><button id="exp-settle" class="btn small">＋ Record payment</button></div>
+          <div id="exp-settle-list"></div>
+        </div>
+      </div>
+      <div class="exp-col">
+        <div class="exp-card"><h3>History</h3><div id="exp-list" class="exp-list"></div></div>
+      </div>
+    </div>
+  </section>
 
   <!-- Tools drawer -->
   <div class="drawer-backdrop" id="drawer-backdrop" hidden></div>
@@ -294,8 +326,103 @@
   <nav class="mobile-nav" id="mobile-nav" aria-label="View switcher">
     <button data-view="list" class="active"><span class="mn-ico">📋</span><span>Plan</span></button>
     <button data-view="map"><span class="mn-ico">🗺️</span><span>Map</span></button>
+    <button data-view="split"><span class="mn-ico">💸</span><span>Split</span></button>
     <button data-view="tools"><span class="mn-ico">⚙️</span><span>Tools</span></button>
   </nav>
+
+  <!-- People modal -->
+  <div class="modal-backdrop" id="people-modal-backdrop" hidden>
+    <div class="modal" role="dialog" aria-modal="true">
+      <div class="drawer-head"><h2>People on the trip</h2><button class="icon-btn" id="people-modal-close" aria-label="Close">✕</button></div>
+      <div style="padding:18px;">
+        <div class="add-row">
+          <input type="text" id="person-input" placeholder="Add a person's name…" />
+          <button id="person-add" class="btn small">Add</button>
+        </div>
+        <div id="people-list" class="places-list"></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Currencies / rates modal -->
+  <div class="modal-backdrop" id="rates-modal-backdrop" hidden>
+    <div class="modal" role="dialog" aria-modal="true">
+      <div class="drawer-head"><h2>Currencies &amp; rates</h2><button class="icon-btn" id="rates-modal-close" aria-label="Close">✕</button></div>
+      <div style="padding:18px;">
+        <label class="small" style="display:flex;flex-direction:column;gap:4px;color:var(--muted);margin-bottom:14px;">Base currency (everything is totalled in this)
+          <select id="base-currency-select"></select>
+        </label>
+        <p class="muted small">Set how much 1 unit of each currency is worth in your base currency.</p>
+        <div id="rates-list" class="rates-list"></div>
+        <div class="add-row" style="margin-top:12px;">
+          <input type="text" id="rate-code" placeholder="Code e.g. THB" maxlength="3" style="max-width:120px;text-transform:uppercase;" />
+          <input type="number" id="rate-val" step="any" min="0" placeholder="value in base" />
+          <button id="rate-add" class="btn small">Add</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Expense modal -->
+  <div class="modal-backdrop" id="exp-modal-backdrop" hidden>
+    <div class="modal" role="dialog" aria-modal="true" aria-labelledby="exp-modal-title">
+      <div class="drawer-head"><h2 id="exp-modal-title">Add expense</h2><button class="icon-btn" id="exp-modal-close" aria-label="Close">✕</button></div>
+      <form id="exp-form">
+        <input type="hidden" id="ex-id" />
+        <div class="form-grid">
+          <label class="full">Description <input type="text" id="ex-desc" placeholder="e.g. Dinner at Bogwangjung" /></label>
+          <label>Amount <input type="number" id="ex-amount" step="any" min="0" required placeholder="0" /></label>
+          <label>Currency <select id="ex-currency"></select></label>
+          <label>Date <input type="date" id="ex-date" /></label>
+          <label>Category <select id="ex-category"></select></label>
+        </div>
+
+        <div class="exp-section">
+          <div class="exp-section-head">
+            <span>Paid by</span>
+            <label class="chk small"><input type="checkbox" id="ex-multi" /> multiple payers</label>
+          </div>
+          <div id="ex-paid-wrap"><select id="ex-paid"></select></div>
+          <div id="ex-payers-wrap" hidden>
+            <p class="muted small">Enter how much each person paid (must total the amount).</p>
+            <div id="ex-payers"></div>
+          </div>
+        </div>
+
+        <div class="exp-section">
+          <div class="exp-section-head"><span>Split between</span></div>
+          <div id="ex-among" class="among-grid"></div>
+          <label class="small" style="display:flex;flex-direction:column;gap:4px;color:var(--muted);margin-top:10px;">How to split
+            <select id="ex-method"></select>
+          </label>
+          <div id="ex-splitvals" class="splitvals"></div>
+          <div id="ex-split-hint" class="split-hint"></div>
+        </div>
+
+        <div class="btn-row end">
+          <button type="button" class="btn danger" id="ex-delete" hidden>Delete</button>
+          <button type="submit" class="btn primary">Save expense</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- Settle-up modal -->
+  <div class="modal-backdrop" id="settle-modal-backdrop" hidden>
+    <div class="modal" role="dialog" aria-modal="true">
+      <div class="drawer-head"><h2>Record a payment</h2><button class="icon-btn" id="settle-modal-close" aria-label="Close">✕</button></div>
+      <form id="settle-form">
+        <div class="form-grid">
+          <label>From (payer) <select id="st-from"></select></label>
+          <label>To (receiver) <select id="st-to"></select></label>
+          <label>Amount (<span id="st-currency-lbl">KRW</span>) <input type="number" id="st-amount" step="any" min="0" required placeholder="0" /></label>
+          <label>Date <input type="date" id="st-date" /></label>
+          <label class="full">Note (optional) <input type="text" id="st-note" placeholder="e.g. paid back via Venmo" /></label>
+        </div>
+        <div class="btn-row end"><button type="submit" class="btn primary">Save payment</button></div>
+      </form>
+    </div>
+  </div>
 
   <div id="toast" class="toast" hidden></div>
 
@@ -304,8 +431,8 @@
   <!-- Firebase (optional live sync). Loads from CDN; app stays local-only if unavailable. -->
   <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-app-compat.js"></script>
   <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-database-compat.js"></script>
-  <script src="js/firebase-config.js?v=14"></script>
-  <script src="js/data.js?v=14"></script>
-  <script src="js/app.js?v=14"></script>
+  <script src="js/firebase-config.js?v=15"></script>
+  <script src="js/data.js?v=15"></script>
+  <script src="js/app.js?v=15"></script>
 </body>
 </html>
